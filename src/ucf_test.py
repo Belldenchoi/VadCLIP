@@ -9,9 +9,12 @@ from model import CLIPVAD
 from utils.dataset import UCFDataset
 from utils.tools import get_batch_mask, get_prompt_text
 from utils.ucf_detectionMAP import getDetectionMAP as dmAP
+from utils.training_log import TrainingLogger
 import ucf_option
 
-def test(model, testdataloader, maxlen, prompt_text, gt, gtsegments, gtlabels, device):
+def test(model, testdataloader, maxlen, prompt_text, gt, gtsegments, gtlabels,
+         device, logger=None, detection_class_indices=None):
+    report = logger.log if logger else lambda message: print(message, flush=True)
     
     model.to(device)
     model.eval()
@@ -72,16 +75,19 @@ def test(model, testdataloader, maxlen, prompt_text, gt, gtsegments, gtlabels, d
     ROC2 = roc_auc_score(gt, np.repeat(ap2, 16))
     AP2 = average_precision_score(gt, np.repeat(ap2, 16))
 
-    print("AUC1: ", ROC1, " AP1: ", AP1)
-    print("AUC2: ", ROC2, " AP2:", AP2)
+    report(f"AUC1={ROC1:.6f} AP1={AP1:.6f}")
+    report(f"AUC2={ROC2:.6f} AP2={AP2:.6f}")
 
-    dmap, iou = dmAP(element_logits2_stack, gtsegments, gtlabels, excludeNormal=False)
+    dmap, iou = dmAP(
+        element_logits2_stack, gtsegments, gtlabels, excludeNormal=False,
+        class_indices=detection_class_indices
+    )
     averageMAP = 0
     for i in range(5):
-        print('mAP@{0:.1f} ={1:.2f}%'.format(iou[i], dmap[i]))
+        report('mAP@{0:.1f}={1:.2f}%'.format(iou[i], dmap[i]))
         averageMAP += dmap[i]
     averageMAP = averageMAP/(i+1)
-    print('average MAP: {:.2f}'.format(averageMAP))
+    report('average_mAP={:.2f}%'.format(averageMAP))
 
     return ROC1, AP1
 
@@ -92,16 +98,59 @@ if __name__ == '__main__':
 
     label_map = dict({'Normal': 'Normal', 'Abuse': 'Abuse', 'Arrest': 'Arrest', 'Arson': 'Arson', 'Assault': 'Assault', 'Burglary': 'Burglary', 'Explosion': 'Explosion', 'Fighting': 'Fighting', 'RoadAccidents': 'RoadAccidents', 'Robbery': 'Robbery', 'Shooting': 'Shooting', 'Shoplifting': 'Shoplifting', 'Stealing': 'Stealing', 'Vandalism': 'Vandalism'})
 
-    testdataset = UCFDataset(args.visual_length, args.test_list, True, label_map)
-    testdataloader = DataLoader(testdataset, batch_size=1, shuffle=False)
-
     prompt_text = get_prompt_text(label_map)
     gt = np.load(args.gt_path)
     gtsegments = np.load(args.gt_segment_path, allow_pickle=True)
     gtlabels = np.load(args.gt_label_path, allow_pickle=True)
+    testdataset = UCFDataset(args.visual_length, args.test_list, True, label_map)
+    detection_class_indices = None
 
-    model = CLIPVAD(args.classes_num, args.embed_dim, args.visual_length, args.visual_width, args.visual_head, args.visual_layers, args.attn_window, args.prompt_prefix, args.prompt_postfix, device)
-    model_param = torch.load(args.model_path)
+    if args.eval_actions:
+        unknown_actions = set(args.eval_actions) - set(label_map)
+        unknown_actions.discard('Normal')
+        if unknown_actions:
+            raise ValueError(f"Unknown UCF actions: {sorted(unknown_actions)}")
+
+        selected_actions = set(args.eval_actions)
+        selected_rows = testdataset.df['label'].eq('Normal') | \
+            testdataset.df['label'].isin(selected_actions)
+        selected_indices = np.flatnonzero(selected_rows.to_numpy())
+
+        clip_frame_lengths = [
+            np.load(path, mmap_mode='r').shape[0] * 16
+            for path in testdataset.df['path']
+        ]
+        offsets = np.concatenate(([0], np.cumsum(clip_frame_lengths)))
+        gt = np.concatenate([
+            gt[offsets[index]:offsets[index + 1]]
+            for index in selected_indices
+        ])
+        gtsegments = gtsegments[selected_indices]
+        gtlabels = gtlabels[selected_indices]
+        testdataset.df = testdataset.df.iloc[selected_indices].reset_index(
+            drop=True
+        )
+        detection_class_indices = [
+            list(label_map).index(action)
+            for action in args.eval_actions if action != 'Normal'
+        ]
+
+    testdataloader = DataLoader(testdataset, batch_size=1, shuffle=False)
+
+    model = CLIPVAD(
+        args.classes_num, args.embed_dim, args.visual_length,
+        args.visual_width, args.visual_head, args.visual_layers,
+        args.attn_window, args.prompt_prefix, args.prompt_postfix, device
+    )
+    logger = TrainingLogger(args.log_path)
+    logger.log(
+        f"evaluation_model={args.model_path} clips={len(testdataset)} "
+        f"actions={args.eval_actions or 'all'}"
+    )
+
+    model_param = torch.load(args.model_path, weights_only=True)
     model.load_state_dict(model_param)
 
-    test(model, testdataloader, args.visual_length, prompt_text, gt, gtsegments, gtlabels, device)
+    test(model, testdataloader, args.visual_length, prompt_text, gt, gtsegments,
+         gtlabels, device, logger=logger,
+         detection_class_indices=detection_class_indices)
