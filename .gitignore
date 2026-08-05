@@ -1,8 +1,0 @@
-__pycache__/
-*.py[cod]
-
-model/
-logs/
-outputs/
-
-list/*_local.csv

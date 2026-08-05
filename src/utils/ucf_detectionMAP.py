@@ -37,8 +37,7 @@ def nms(dets, thresh=0.6, top_k=-1):
 
     return dets[keep], keep
 
-def getLocMAP(predictions, th, gtsegments, gtlabels, excludeNormal,
-              class_indices=None):
+def getLocMAP(predictions, th, gtsegments, gtlabels, excludeNormal):
    if excludeNormal is True:
        classes_num = 13
        videos_num = 140
@@ -58,8 +57,7 @@ def getLocMAP(predictions, th, gtsegments, gtlabels, excludeNormal,
       predictions_mod.append(p*ind)
    predictions = predictions_mod
    ap = []
-   evaluated_classes = range(0, 14) if class_indices is None else class_indices
-   for c in evaluated_classes:
+   for c in range(0, 14):
       segment_predict = []
       # Get list of all predictions for class c
       for i in range(len(predictions)):
@@ -124,14 +122,12 @@ def getLocMAP(predictions, th, gtsegments, gtlabels, excludeNormal,
    return 100*np.mean(ap)
   
 
-def getDetectionMAP(predictions, segments, labels, excludeNormal=False,
-                    class_indices=None):
+def getDetectionMAP(predictions, segments, labels, excludeNormal=False):
    iou_list = [0.1, 0.2, 0.3, 0.4, 0.5]
    # iou_list = [0.5]
    dmap_list = []
    for iou in iou_list:
       # print('Testing for IoU {:.1f}'.format(iou))
-      dmap_list.append(getLocMAP(predictions, iou, segments, labels,
-                                 excludeNormal, class_indices))
+      dmap_list.append(getLocMAP(predictions, iou, segments, labels, excludeNormal))
    return dmap_list, iou_list
 
