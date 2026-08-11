@@ -44,6 +44,15 @@ parser.add_argument('--c-topk-temperature', default=1.0, type=float,
                     help='Soft Top-K temperature for the C-branch')
 parser.add_argument('--a-topk-temperature', default=1.0, type=float,
                     help='Soft Top-K temperature for the A-branch')
+parser.add_argument('--temporal-segment-topk', action='store_true',
+                    help=('After the configured start epoch, keep original '
+                          'hard Top-K in C-branch and use a class-wise best '
+                          'contiguous segment in A-branch'))
+parser.add_argument('--temporal-segment-start-epoch', default=6, type=int,
+                    help='1-based epoch where temporal segment pooling starts')
+parser.add_argument('--temporal-smoothing-kernel', default=1, type=int,
+                    help=('Odd fixed Conv1D mean-kernel size applied before '
+                          'segment selection; 1 disables smoothing'))
 parser.add_argument('--adaptive-instance-selection', action='store_true',
                     help='Use C-branch AIS K for paired C/A MIL pooling')
 parser.add_argument('--ais-score-threshold', default=0.9, type=float,

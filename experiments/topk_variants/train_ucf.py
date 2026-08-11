@@ -16,7 +16,7 @@ from test_ucf import test
 from dataset_variants import UCFDataset
 from utils.tools import get_prompt_text, get_batch_label
 from adaptive_instance_selection import select_adaptive_instance_k
-from topk_pooling import topk_pool, video_topk_size
+from topk_pooling import temporal_segment_pool, topk_pool, video_topk_size
 from training_log import TrainingLogger
 import options as ucf_option
 
@@ -30,7 +30,8 @@ def resolve_pool_k(length, sample_index, instance_k=None):
 def CLASM(logits, labels, lengths, device, temperature=1.0,
           pooling='soft',
           multi_k_percentages=(1.0, 5.0, 10.0, 20.0),
-          instance_k=None):
+          instance_k=None, temporal_segment=False,
+          temporal_smoothing_kernel=1):
     labels = labels / torch.sum(labels, dim=1, keepdim=True)
     labels = labels.to(device)
 
@@ -41,11 +42,17 @@ def CLASM(logits, labels, lengths, device, temperature=1.0,
         instance_logits = []
         for i in range(logits.shape[0]):
             length = int(lengths[i].item())
-            pooled = topk_pool(
-                logits[i, :length],
-                resolve_pool_k(length, i, instance_k), pooling,
-                temperature, multi_k_percentages
-            )
+            pool_k = resolve_pool_k(length, i, instance_k)
+            if temporal_segment:
+                pooled = temporal_segment_pool(
+                    logits[i, :length], pool_k,
+                    temporal_smoothing_kernel
+                )
+            else:
+                pooled = topk_pool(
+                    logits[i, :length], pool_k, pooling,
+                    temperature, multi_k_percentages
+                )
             instance_logits.append(pooled)
         instance_logits = torch.stack(instance_logits)
         milloss = -torch.mean(torch.sum(
@@ -93,6 +100,25 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         raise ValueError("--ais-score-threshold must be in [0, 1]")
     if args.ais_min_k < 1:
         raise ValueError("--ais-min-k must be at least 1")
+    if args.temporal_segment_topk and args.topk_pooling != 'mean':
+        raise ValueError(
+            "Temporal segment Top-K is an isolated hard Top-K experiment. "
+            "Use --topk-pooling mean."
+        )
+    if args.temporal_segment_topk and args.adaptive_instance_selection:
+        raise ValueError(
+            "Temporal segment Top-K cannot be combined with Adaptive "
+            "Instance Selection in the first experiment."
+        )
+    if (args.temporal_segment_topk and
+            args.temporal_segment_start_epoch < 1):
+        raise ValueError("--temporal-segment-start-epoch must be at least 1")
+    if (args.temporal_segment_topk and
+            (args.temporal_smoothing_kernel < 1 or
+             args.temporal_smoothing_kernel % 2 == 0)):
+        raise ValueError(
+            "--temporal-smoothing-kernel must be a positive odd integer"
+        )
 
     gt = np.load(args.gt_path)
     gtsegments = np.load(args.gt_segment_path, allow_pickle=True)
@@ -117,7 +143,11 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
         f"ais_score_threshold={args.ais_score_threshold} "
-        f"ais_min_k={args.ais_min_k}"
+        f"ais_min_k={args.ais_min_k} "
+        f"temporal_segment_topk={args.temporal_segment_topk} "
+        f"temporal_segment_start_epoch="
+        f"{args.temporal_segment_start_epoch} "
+        f"temporal_smoothing_kernel={args.temporal_smoothing_kernel}"
     )
     prompt_text = get_prompt_text(label_map)
     ap_best = 0
@@ -160,6 +190,18 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
 
     for e in range(start_epoch, args.max_epoch):
         model.train()
+        temporal_segment_active = (
+            args.temporal_segment_topk and
+            e + 1 >= args.temporal_segment_start_epoch
+        )
+        if args.temporal_segment_topk:
+            logger.log(
+                f"epoch={e + 1} temporal_segment_active="
+                f"{temporal_segment_active} "
+                "c_branch_pooling=original_hard_topk "
+                f"a_branch_pooling="
+                f"{'temporal_segment' if temporal_segment_active else 'original_hard_topk'}"
+            )
         loss_total1 = 0
         loss_total2 = 0
         loss_total3 = 0
@@ -209,7 +251,9 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               args.a_topk_temperature, args.topk_pooling,
                               args.multi_k_percentages,
                               None if ais_selection is None
-                              else ais_selection.batch_k)
+                              else ais_selection.batch_k,
+                              temporal_segment_active,
+                              args.temporal_smoothing_kernel)
                 loss3 = torch.zeros(1, device=device)
                 text_feature_normal = text_features[0] / text_features[0].norm(
                     dim=-1, keepdim=True

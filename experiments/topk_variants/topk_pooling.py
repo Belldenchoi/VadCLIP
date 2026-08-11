@@ -3,7 +3,84 @@
 import math
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor
+
+
+def smooth_temporal_scores(scores: Tensor, kernel_size: int = 1) -> Tensor:
+    """Smooth each score channel independently with a fixed Conv1D kernel.
+
+    ``scores`` has shape ``[T]`` or ``[T, C]``. Replicate padding preserves
+    the sequence length without introducing artificial zero-valued borders.
+    A kernel size of one is the exact no-smoothing path.
+    """
+    if scores.ndim not in (1, 2):
+        raise ValueError(
+            f"scores must have shape [T] or [T, C], got {scores.shape}"
+        )
+    if scores.shape[0] == 0:
+        raise ValueError("cannot smooth an empty sequence")
+    if kernel_size < 1 or kernel_size % 2 == 0:
+        raise ValueError("smoothing kernel size must be a positive odd integer")
+    if kernel_size == 1:
+        return scores
+
+    squeeze_channel = scores.ndim == 1
+    channel_scores = scores.unsqueeze(1) if squeeze_channel else scores
+    # [T, C] -> [1, C, T], followed by depthwise temporal convolution.
+    channel_scores = channel_scores.transpose(0, 1).unsqueeze(0)
+    channels = channel_scores.shape[1]
+    kernel = torch.full(
+        (channels, 1, kernel_size),
+        1.0 / kernel_size,
+        dtype=scores.dtype,
+        device=scores.device,
+    )
+    padding = kernel_size // 2
+    channel_scores = F.pad(
+        channel_scores, (padding, padding), mode="replicate"
+    )
+    smoothed = F.conv1d(
+        channel_scores, kernel, groups=channels
+    ).squeeze(0).transpose(0, 1)
+    return smoothed.squeeze(1) if squeeze_channel else smoothed
+
+
+def temporal_segment_pool(scores: Tensor, k: int,
+                          smoothing_kernel: int = 1,
+                          return_start_indices: bool = False):
+    """Pool the highest-scoring contiguous temporal segment.
+
+    For ``[T, C]`` A-branch scores, every class selects its own segment.
+    Selection is based on optionally smoothed scores and the returned value is
+    the mean over that selected smoothed segment. This mirrors hard Top-K's
+    discrete selection while enforcing temporal continuity.
+    """
+    if scores.ndim not in (1, 2):
+        raise ValueError(
+            f"scores must have shape [T] or [T, C], got {scores.shape}"
+        )
+    if scores.shape[0] == 0:
+        raise ValueError("cannot pool an empty sequence")
+
+    k = max(1, min(int(k), scores.shape[0]))
+    smoothed = smooth_temporal_scores(scores, smoothing_kernel)
+    squeeze_channel = smoothed.ndim == 1
+    channel_scores = (
+        smoothed.unsqueeze(1) if squeeze_channel else smoothed
+    ).transpose(0, 1).unsqueeze(1)  # [C, 1, T]
+    mean_kernel = torch.full(
+        (1, 1, k), 1.0 / k,
+        dtype=scores.dtype, device=scores.device
+    )
+    window_means = F.conv1d(channel_scores, mean_kernel).squeeze(1)
+    pooled, start_indices = window_means.max(dim=-1)
+    if squeeze_channel:
+        pooled = pooled.squeeze(0)
+        start_indices = start_indices.squeeze(0)
+    if return_start_indices:
+        return pooled, start_indices
+    return pooled
 
 
 def multi_k_scale_sizes(length: int,
