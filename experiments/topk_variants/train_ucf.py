@@ -255,15 +255,22 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               temporal_segment_active,
                               args.temporal_smoothing_kernel)
                 loss3 = torch.zeros(1, device=device)
-                text_feature_normal = text_features[0] / text_features[0].norm(
-                    dim=-1, keepdim=True
-                )
-                for j in range(1, text_features.shape[0]):
-                    text_feature_abr = text_features[j] / text_features[j].norm(
-                        dim=-1, keepdim=True
+                if not getattr(model, 'uses_fixed_prototypes', False):
+                    text_feature_normal = (
+                        text_features[0] / text_features[0].norm(
+                            dim=-1, keepdim=True
+                        )
                     )
-                    loss3 += torch.abs(text_feature_normal @ text_feature_abr)
-                loss3 = loss3 / 13 * 1e-1
+                    for j in range(1, text_features.shape[0]):
+                        text_feature_abr = (
+                            text_features[j] / text_features[j].norm(
+                                dim=-1, keepdim=True
+                            )
+                        )
+                        loss3 += torch.abs(
+                            text_feature_normal @ text_feature_abr
+                        )
+                    loss3 = loss3 / (text_features.shape[0] - 1) * 1e-1
                 loss = loss1 + loss2 + loss3
 
             loss_total1 += loss1.item()
