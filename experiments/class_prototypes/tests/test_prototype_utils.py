@@ -72,6 +72,11 @@ class PrototypeUtilityTests(unittest.TestCase):
         scored = score_embeddings(class_embeddings, anchors)
         self.assertEqual(tuple(scored[0]["total"].shape), (4,))
 
+    def test_build_cli_exposes_diversity_disable_flag(self):
+        source = (ROOT / "build_prototypes.py").read_text(encoding="utf-8")
+        self.assertIn("--disable-diversity-filter", source)
+        self.assertIn('"diversity_filter_enabled"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

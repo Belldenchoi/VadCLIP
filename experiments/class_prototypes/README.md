@@ -205,6 +205,86 @@ feature phụ thuộc video `[B, C, D]` như đầu ra của Visual Prompt gốc
 Thí nghiệm đầu tiên chỉ đánh giá Class Prototype với Top-K gốc. AIS và Temporal
 Segment Top-K không được bật để tránh thay đổi đồng thời nhiều cơ chế.
 
+### Ablation Class Prototype
+
+Thứ tự ablation sử dụng cùng description, CLIP checkpoint, semantic score và class
+order. Chỉ thay selection, diversity filtering hoặc aggregation:
+
+```text
+A0: Top-1
+    20 candidates → chọn embedding score cao nhất → 1 prototype
+
+A1: Top-K Mean
+    20 candidates → score-ranked Top-K → mean → normalize
+
+A2: Diversity-filtered Top-K
+    20 candidates → score ranking → diversity filtering → mean → normalize
+
+A3: Weighted Top-K
+    20 candidates → score-ranked Top-K → weighted mean → normalize
+
+A4: Diversity-filtered + Weighted Top-K
+    20 candidates → score ranking → diversity filtering
+                  → weighted mean → normalize
+```
+
+| ID | K | Diversity | Aggregation | Mục đích |
+|---|---:|---:|---|---|
+| A0 | 1 | Không | Mean | Một description tốt nhất |
+| A1 | 5 | Không | Mean | Đo lợi ích multi-description |
+| A2 | 5 | Có, `0.90` | Mean | Đo riêng lợi ích diversity |
+| A3 | 5 | Không | Weighted mean | Đo riêng lợi ích weighting |
+| A4 | 5 | Có, `0.90` | Weighted mean | Kết hợp diversity và weighting |
+
+Lệnh build tương ứng:
+
+```bash
+# A0 — Top-1
+python experiments/class_prototypes/build_prototypes.py \
+  --top-k 1 \
+  --disable-diversity-filter \
+  --aggregation mean \
+  --output outputs/class_prototypes/a0_top1.pt \
+  --audit-output outputs/class_prototypes/a0_top1.json
+
+# A1 — Top-K Mean
+python experiments/class_prototypes/build_prototypes.py \
+  --top-k 5 \
+  --disable-diversity-filter \
+  --aggregation mean \
+  --output outputs/class_prototypes/a1_topk_mean.pt \
+  --audit-output outputs/class_prototypes/a1_topk_mean.json
+
+# A2 — Diversity-filtered Top-K Mean
+python experiments/class_prototypes/build_prototypes.py \
+  --top-k 5 \
+  --diversity-threshold 0.90 \
+  --aggregation mean \
+  --output outputs/class_prototypes/a2_diverse_topk_mean.pt \
+  --audit-output outputs/class_prototypes/a2_diverse_topk_mean.json
+
+# A3 — Weighted Top-K
+python experiments/class_prototypes/build_prototypes.py \
+  --top-k 5 \
+  --disable-diversity-filter \
+  --aggregation weighted_mean \
+  --weight-temperature 0.10 \
+  --output outputs/class_prototypes/a3_weighted_topk.pt \
+  --audit-output outputs/class_prototypes/a3_weighted_topk.json
+
+# A4 — Diversity-filtered + Weighted Top-K
+python experiments/class_prototypes/build_prototypes.py \
+  --top-k 5 \
+  --diversity-threshold 0.90 \
+  --aggregation weighted_mean \
+  --weight-temperature 0.10 \
+  --output outputs/class_prototypes/a4_diverse_weighted_topk.pt \
+  --audit-output outputs/class_prototypes/a4_diverse_weighted_topk.json
+```
+
+Mỗi cache trên phải được train bằng một output/checkpoint/log riêng. Toàn bộ cấu hình
+training và test set phải giữ cố định để kết quả A0–A4 có thể so sánh trực tiếp.
+
 ## Description
 
 `descriptions/ucf_crime_descriptions.json` chứa 20 description cho mỗi class, tập trung

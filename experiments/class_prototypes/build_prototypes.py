@@ -44,6 +44,10 @@ def parse_args():
     parser.add_argument("--top-k", default=5, type=int)
     parser.add_argument("--diversity-threshold", default=0.90, type=float)
     parser.add_argument(
+        "--disable-diversity-filter", action="store_true",
+        help="Select score-ranked Top-K directly without cosine filtering"
+    )
+    parser.add_argument(
         "--aggregation", choices=["mean", "weighted_mean"],
         default="weighted_mean"
     )
@@ -101,10 +105,16 @@ def main():
     for class_index, class_name in enumerate(class_names):
         embeddings = class_embeddings[class_index]
         score_data = scores_by_class[class_index]
-        selected, rejected = select_diverse_embeddings(
-            embeddings, score_data["total"], args.top_k,
-            args.diversity_threshold
-        )
+        if args.disable_diversity_filter:
+            selected = torch.argsort(
+                score_data["total"], descending=True
+            )[:args.top_k].tolist()
+            rejected = []
+        else:
+            selected, rejected = select_diverse_embeddings(
+                embeddings, score_data["total"], args.top_k,
+                args.diversity_threshold
+            )
         if not selected:
             raise RuntimeError(f"no prototype contributor for {class_name}")
         prototype, weights = aggregate_prototype(
@@ -129,6 +139,7 @@ def main():
         audit_classes[class_name] = {
             "candidate_count": len(descriptions_by_class[class_index]),
             "selected_count": len(selected),
+            "diversity_filter_enabled": not args.disable_diversity_filter,
             "selected": selected_rows,
             "diversity_rejections": rejected,
         }
@@ -138,6 +149,7 @@ def main():
         "clip_model": args.clip_model,
         "description_sha256": description_hash,
         "top_k": args.top_k,
+        "diversity_filter_enabled": not args.disable_diversity_filter,
         "diversity_threshold": args.diversity_threshold,
         "aggregation": args.aggregation,
         "weight_temperature": args.weight_temperature,
