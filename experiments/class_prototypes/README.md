@@ -1,5 +1,8 @@
 # VadCLIP Direct Class Prototypes
 
+Kết quả baseline VadCLIP gốc, A0–A4 và phân tích log huấn luyện được tổng hợp tại
+[RESULTS.md](RESULTS.md).
+
 Thí nghiệm này thay Learnable Prompt và Visual Prompt của A-branch bằng class
 prototype cố định. Temporal encoder, C-branch và MIL-Align hard Top-K gốc vẫn giữ nguyên.
 

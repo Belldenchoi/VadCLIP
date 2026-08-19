@@ -319,7 +319,10 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 print('epoch: ', e+1, '| step: ', step, '| loss1: ', loss_total1 / (i+1), '| loss2: ', loss_total2 / (i+1), '| loss3: ', loss3.item())
                 AUC, AP = test(model, testloader, args.visual_length,
                                prompt_text, gt, gtsegments, gtlabels, device,
-                               logger=logger)
+                               logger=logger,
+                               temporal_postprocess=temporal_segment_active,
+                               temporal_smoothing_kernel=
+                               args.temporal_smoothing_kernel)
                 AP = AUC
 
                 if AP > ap_best:

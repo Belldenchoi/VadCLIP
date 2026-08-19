@@ -73,6 +73,31 @@ class TemporalSegmentPoolingTests(unittest.TestCase):
             smoothed, torch.tensor([2.0, 1.0, 0.0])
         ))
 
+    def test_kernel_one_is_exact_identity(self):
+        scores = torch.rand(7, 4)
+
+        smoothed = smooth_temporal_scores(scores, kernel_size=1)
+
+        self.assertIs(smoothed, scores)
+
+    def test_smoothing_keeps_class_channels_independent(self):
+        scores = torch.tensor([
+            [3.0, 0.0],
+            [0.0, 0.0],
+            [0.0, 6.0],
+        ])
+
+        smoothed = smooth_temporal_scores(scores, kernel_size=3)
+
+        self.assertTrue(torch.allclose(
+            smoothed,
+            torch.tensor([
+                [2.0, 0.0],
+                [1.0, 2.0],
+                [0.0, 4.0],
+            ]),
+        ))
+
     def test_temporal_segment_pool_backpropagates(self):
         scores = torch.tensor(
             [[1.0, 0.0], [2.0, 0.0], [0.0, 3.0]],

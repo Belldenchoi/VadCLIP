@@ -1,0 +1,866 @@
+{
+  "created_at": "2026-08-13T01:53:33.759288+00:00",
+  "description_file": "/kaggle/working/VadCLIP/experiments/class_prototypes/descriptions/ucf_crime_descriptions.json",
+  "class_order": [
+    "normal",
+    "abuse",
+    "arrest",
+    "arson",
+    "assault",
+    "burglary",
+    "explosion",
+    "fighting",
+    "roadAccidents",
+    "robbery",
+    "shooting",
+    "shoplifting",
+    "stealing",
+    "vandalism"
+  ],
+  "prototype_shape": [
+    14,
+    512
+  ],
+  "prototype_norms": [
+    0.9999999403953552,
+    0.9999998807907104,
+    0.9999999403953552,
+    1.0,
+    1.0000001192092896,
+    0.9999999403953552,
+    1.0,
+    1.0000001192092896,
+    1.0,
+    0.9999998807907104,
+    1.0,
+    1.0000001192092896,
+    0.9999998807907104,
+    0.9999998807907104
+  ],
+  "config": {
+    "clip_model": "ViT-B/16",
+    "description_sha256": "bec218ba72e2cea3930acda4a6f60a47a16c1bc8b2b464e23ef14bc677402bed",
+    "top_k": 5,
+    "diversity_filter_enabled": false,
+    "diversity_threshold": 0.9,
+    "aggregation": "mean",
+    "weight_temperature": 0.1,
+    "alpha": 0.4,
+    "beta": 0.3,
+    "gamma": 0.3
+  },
+  "classes": {
+    "normal": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 14,
+          "description": "person uses phone",
+          "score": 0.33758166432380676,
+          "name_score": 0.8532881140708923,
+          "intra_score": 0.9003691673278809,
+          "inter_score": 0.9128144383430481,
+          "hard_inter_class": "stealing",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 17,
+          "description": "vendor serves customer",
+          "score": 0.3272137939929962,
+          "name_score": 0.792858362197876,
+          "intra_score": 0.892534077167511,
+          "inter_score": 0.8589659333229065,
+          "hard_inter_class": "stealing",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 19,
+          "description": "employee arranges products",
+          "score": 0.3238520920276642,
+          "name_score": 0.8002552390098572,
+          "intra_score": 0.9007057547569275,
+          "inter_score": 0.8882055878639221,
+          "hard_inter_class": "shoplifting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 1,
+          "description": "people talk",
+          "score": 0.322833776473999,
+          "name_score": 0.82181316614151,
+          "intra_score": 0.8939070701599121,
+          "inter_score": 0.9135454893112183,
+          "hard_inter_class": "fighting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 0,
+          "description": "person walks",
+          "score": 0.320669025182724,
+          "name_score": 0.7964707612991333,
+          "intra_score": 0.9073171615600586,
+          "inter_score": 0.9003814458847046,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "abuse": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 1,
+          "description": "person pushes victim",
+          "score": 0.3627680242061615,
+          "name_score": 0.8898234963417053,
+          "intra_score": 0.9817050099372864,
+          "inter_score": 0.9589096903800964,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 15,
+          "description": "aggressor pulls victim",
+          "score": 0.3616776466369629,
+          "name_score": 0.8773820400238037,
+          "intra_score": 0.9391909241676331,
+          "inter_score": 0.9034414887428284,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 17,
+          "description": "person shoves victim",
+          "score": 0.36154329776763916,
+          "name_score": 0.8837027549743652,
+          "intra_score": 0.9779046177864075,
+          "inter_score": 0.9510306119918823,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 14,
+          "description": "person forces victim down",
+          "score": 0.35844942927360535,
+          "name_score": 0.8778727650642395,
+          "intra_score": 0.976904571056366,
+          "inter_score": 0.9525701403617859,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 0,
+          "description": "person hits victim",
+          "score": 0.35666510462760925,
+          "name_score": 0.8715174794197083,
+          "intra_score": 0.9820418357849121,
+          "inter_score": 0.9551815986633301,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "arrest": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 1,
+          "description": "police restrain suspect",
+          "score": 0.3796275556087494,
+          "name_score": 0.8979460597038269,
+          "intra_score": 0.9503679275512695,
+          "inter_score": 0.8822040557861328,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 11,
+          "description": "police hold suspect",
+          "score": 0.37956032156944275,
+          "name_score": 0.896853506565094,
+          "intra_score": 0.9775605201721191,
+          "inter_score": 0.9081642627716064,
+          "hard_inter_class": "shooting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 13,
+          "description": "police capture suspect",
+          "score": 0.3795352876186371,
+          "name_score": 0.889387845993042,
+          "intra_score": 0.9758168458938599,
+          "inter_score": 0.8965497016906738,
+          "hard_inter_class": "robbery",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 9,
+          "description": "police block suspect",
+          "score": 0.3734644055366516,
+          "name_score": 0.8928347229957581,
+          "intra_score": 0.9698606729507446,
+          "inter_score": 0.9154257774353027,
+          "hard_inter_class": "shooting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 0,
+          "description": "officer handcuffs suspect",
+          "score": 0.37234190106391907,
+          "name_score": 0.8667517900466919,
+          "intra_score": 0.9478343725204468,
+          "inter_score": 0.862363874912262,
+          "hard_inter_class": "robbery",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "arson": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 14,
+          "description": "person feeds material into fire",
+          "score": 0.3478925824165344,
+          "name_score": 0.8433589339256287,
+          "intra_score": 0.9485570788383484,
+          "inter_score": 0.9133936762809753,
+          "hard_inter_class": "explosion",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 0,
+          "description": "person ignites object",
+          "score": 0.3441884219646454,
+          "name_score": 0.8470331430435181,
+          "intra_score": 0.9486541152000427,
+          "inter_score": 0.9307368993759155,
+          "hard_inter_class": "shooting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 17,
+          "description": "person throws object with flames",
+          "score": 0.34410393238067627,
+          "name_score": 0.8398914933204651,
+          "intra_score": 0.9530273675918579,
+          "inter_score": 0.9258695244789124,
+          "hard_inter_class": "shooting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 3,
+          "description": "person sets building on fire",
+          "score": 0.34371131658554077,
+          "name_score": 0.8521219491958618,
+          "intra_score": 0.9506509900093079,
+          "inter_score": 0.9411091804504395,
+          "hard_inter_class": "shooting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 13,
+          "description": "person starts fire and leaves",
+          "score": 0.3427903950214386,
+          "name_score": 0.8488006591796875,
+          "intra_score": 0.9534390568733215,
+          "inter_score": 0.9425386190414429,
+          "hard_inter_class": "shooting",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "assault": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 5,
+          "description": "person hits person with object",
+          "score": 0.3499985337257385,
+          "name_score": 0.865269124507904,
+          "intra_score": 0.9660909175872803,
+          "inter_score": 0.9531213045120239,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 7,
+          "description": "person grabs person and strikes",
+          "score": 0.3492223918437958,
+          "name_score": 0.8598607182502747,
+          "intra_score": 0.9678771495819092,
+          "inter_score": 0.9502834677696228,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 2,
+          "description": "person strikes person",
+          "score": 0.3480163812637329,
+          "name_score": 0.8448259830474854,
+          "intra_score": 0.9627368450164795,
+          "inter_score": 0.92911696434021,
+          "hard_inter_class": "fighting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 18,
+          "description": "group attacks person",
+          "score": 0.3476187586784363,
+          "name_score": 0.8803195953369141,
+          "intra_score": 0.9298852682113647,
+          "inter_score": 0.9449155330657959,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 15,
+          "description": "person shoves person",
+          "score": 0.34699031710624695,
+          "name_score": 0.8548256158828735,
+          "intra_score": 0.968266487121582,
+          "inter_score": 0.9513994455337524,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "burglary": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 17,
+          "description": "person exits building carrying property",
+          "score": 0.2689681649208069,
+          "name_score": 0.6501950621604919,
+          "intra_score": 0.9227675199508667,
+          "inter_score": 0.8931336402893066,
+          "hard_inter_class": "shooting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 11,
+          "description": "person climbs fence and enters property",
+          "score": 0.25575461983680725,
+          "name_score": 0.6282999515533447,
+          "intra_score": 0.8920050263404846,
+          "inter_score": 0.8772228360176086,
+          "hard_inter_class": "vandalism",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 13,
+          "description": "person crawls through entrance",
+          "score": 0.2523200809955597,
+          "name_score": 0.6176477670669556,
+          "intra_score": 0.9018616676330566,
+          "inter_score": 0.8843249678611755,
+          "hard_inter_class": "vandalism",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 14,
+          "description": "person unlocks door with tool",
+          "score": 0.2515049874782562,
+          "name_score": 0.6028969287872314,
+          "intra_score": 0.9059609770774841,
+          "inter_score": 0.8714736104011536,
+          "hard_inter_class": "vandalism",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 0,
+          "description": "person breaks window and enters",
+          "score": 0.2514723241329193,
+          "name_score": 0.6286565661430359,
+          "intra_score": 0.9394694566726685,
+          "inter_score": 0.939437210559845,
+          "hard_inter_class": "vandalism",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "explosion": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 0,
+          "description": "object explodes",
+          "score": 0.37079355120658875,
+          "name_score": 0.9050102829933167,
+          "intra_score": 0.9440070986747742,
+          "inter_score": 0.9147090315818787,
+          "hard_inter_class": "vandalism",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 2,
+          "description": "container explodes",
+          "score": 0.36369726061820984,
+          "name_score": 0.882732629776001,
+          "intra_score": 0.9144234657287598,
+          "inter_score": 0.8790760040283203,
+          "hard_inter_class": "arson",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 3,
+          "description": "building erupts",
+          "score": 0.3573615550994873,
+          "name_score": 0.8632106781005859,
+          "intra_score": 0.8973425030708313,
+          "inter_score": 0.8570849299430847,
+          "hard_inter_class": "normal",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 8,
+          "description": "structure bursts apart",
+          "score": 0.35689476132392883,
+          "name_score": 0.8620849251747131,
+          "intra_score": 0.9100908637046814,
+          "inter_score": 0.8698883652687073,
+          "hard_inter_class": "fighting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 1,
+          "description": "vehicle explodes",
+          "score": 0.35545530915260315,
+          "name_score": 0.8759954571723938,
+          "intra_score": 0.9376617670059204,
+          "inter_score": 0.9208045601844788,
+          "hard_inter_class": "roadAccidents",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "fighting": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 15,
+          "description": "people block and counterattack",
+          "score": 0.36803576350212097,
+          "name_score": 0.8969466686248779,
+          "intra_score": 0.938737690448761,
+          "inter_score": 0.9078807234764099,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 9,
+          "description": "people knock each other down",
+          "score": 0.365874320268631,
+          "name_score": 0.8918247222900391,
+          "intra_score": 0.9630322456359863,
+          "inter_score": 0.9325507283210754,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 4,
+          "description": "people strike each other",
+          "score": 0.365242600440979,
+          "name_score": 0.8876366019248962,
+          "intra_score": 0.9527166485786438,
+          "inter_score": 0.9187566637992859,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 7,
+          "description": "people chase and fight",
+          "score": 0.36456605792045593,
+          "name_score": 0.8865012526512146,
+          "intra_score": 0.9543734192848206,
+          "inter_score": 0.9211548566818237,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 12,
+          "description": "crowd joins fight",
+          "score": 0.3628668785095215,
+          "name_score": 0.892679750919342,
+          "intra_score": 0.9351958632469177,
+          "inter_score": 0.9158793687820435,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "roadAccidents": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 17,
+          "description": "vehicle swerves and crashes",
+          "score": 0.3830476999282837,
+          "name_score": 0.9048923850059509,
+          "intra_score": 0.9359377026557922,
+          "inter_score": 0.8656352758407593,
+          "hard_inter_class": "normal",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 14,
+          "description": "vehicle crosses lane and collides",
+          "score": 0.374972939491272,
+          "name_score": 0.8695483803749084,
+          "intra_score": 0.9479913711547852,
+          "inter_score": 0.8574795722961426,
+          "hard_inter_class": "arrest",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 10,
+          "description": "vehicles collide at intersection",
+          "score": 0.3701939582824707,
+          "name_score": 0.846404492855072,
+          "intra_score": 0.9325053691864014,
+          "inter_score": 0.8270648717880249,
+          "hard_inter_class": "explosion",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 3,
+          "description": "vehicle overturns",
+          "score": 0.368042528629303,
+          "name_score": 0.8587867617607117,
+          "intra_score": 0.9197925329208374,
+          "inter_score": 0.8380330801010132,
+          "hard_inter_class": "explosion",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 11,
+          "description": "vehicle rolls after collision",
+          "score": 0.36604946851730347,
+          "name_score": 0.8486782908439636,
+          "intra_score": 0.9464470148086548,
+          "inter_score": 0.8578532338142395,
+          "hard_inter_class": "vandalism",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "robbery": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 13,
+          "description": "person steals property using weapon",
+          "score": 0.3419952690601349,
+          "name_score": 0.8477877974510193,
+          "intra_score": 0.9416910409927368,
+          "inter_score": 0.9320905804634094,
+          "hard_inter_class": "shooting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 6,
+          "description": "person attacks victim and takes belongings",
+          "score": 0.3396477699279785,
+          "name_score": 0.8334103226661682,
+          "intra_score": 0.9686540961265564,
+          "inter_score": 0.9477086663246155,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 0,
+          "description": "person threatens victim and takes property",
+          "score": 0.3376910090446472,
+          "name_score": 0.8364183306694031,
+          "intra_score": 0.9591971039772034,
+          "inter_score": 0.9487848877906799,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 15,
+          "description": "person demands belongings from victim",
+          "score": 0.3364012539386749,
+          "name_score": 0.8337100148200989,
+          "intra_score": 0.9418846964836121,
+          "inter_score": 0.9321604371070862,
+          "hard_inter_class": "stealing",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 3,
+          "description": "person takes wallet from victim",
+          "score": 0.3349074423313141,
+          "name_score": 0.8232946395874023,
+          "intra_score": 0.9473416209220886,
+          "inter_score": 0.9287098050117493,
+          "hard_inter_class": "stealing",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "shooting": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 11,
+          "description": "person shoots and flees",
+          "score": 0.35796406865119934,
+          "name_score": 0.8613309860229492,
+          "intra_score": 0.9610832333564758,
+          "inter_score": 0.9163109660148621,
+          "hard_inter_class": "arson",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 9,
+          "description": "person raises weapon and shoots",
+          "score": 0.35393038392066956,
+          "name_score": 0.8547396659851074,
+          "intra_score": 0.9699282050132751,
+          "inter_score": 0.9298132061958313,
+          "hard_inter_class": "robbery",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 1,
+          "description": "person shoots victim",
+          "score": 0.34565219283103943,
+          "name_score": 0.849150538444519,
+          "intra_score": 0.9550493955612183,
+          "inter_score": 0.935076117515564,
+          "hard_inter_class": "abuse",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 10,
+          "description": "people exchange gunfire",
+          "score": 0.34333476424217224,
+          "name_score": 0.8370512127876282,
+          "intra_score": 0.9443303942680359,
+          "inter_score": 0.9159494042396545,
+          "hard_inter_class": "fighting",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 18,
+          "description": "group fires weapons",
+          "score": 0.34320345520973206,
+          "name_score": 0.8365806341171265,
+          "intra_score": 0.9329450726509094,
+          "inter_score": 0.9043744206428528,
+          "hard_inter_class": "arson",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "shoplifting": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 7,
+          "description": "shopper hides merchandise in clothing",
+          "score": 0.3646286427974701,
+          "name_score": 0.8714908957481384,
+          "intra_score": 0.956268310546875,
+          "inter_score": 0.902827262878418,
+          "hard_inter_class": "robbery",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 18,
+          "description": "shopper conceals goods near shelf",
+          "score": 0.3607354760169983,
+          "name_score": 0.8494104743003845,
+          "intra_score": 0.921177089214325,
+          "inter_score": 0.8512729406356812,
+          "hard_inter_class": "normal",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 0,
+          "description": "shopper hides product",
+          "score": 0.35452067852020264,
+          "name_score": 0.8532324433326721,
+          "intra_score": 0.9495572447776794,
+          "inter_score": 0.9054648876190186,
+          "hard_inter_class": "normal",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 15,
+          "description": "shopper takes items and leaves",
+          "score": 0.35430410504341125,
+          "name_score": 0.8516606092453003,
+          "intra_score": 0.9507560133934021,
+          "inter_score": 0.9052899479866028,
+          "hard_inter_class": "stealing",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 9,
+          "description": "shopper takes item without paying",
+          "score": 0.35365214943885803,
+          "name_score": 0.8562670946121216,
+          "intra_score": 0.9570066928863525,
+          "inter_score": 0.9198557138442993,
+          "hard_inter_class": "robbery",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "stealing": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 6,
+          "description": "person grabs belongings and leaves",
+          "score": 0.34482547640800476,
+          "name_score": 0.8480828404426575,
+          "intra_score": 0.9423460364341736,
+          "inter_score": 0.9237047433853149,
+          "hard_inter_class": "burglary",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 17,
+          "description": "person takes property while owner leaves",
+          "score": 0.33957093954086304,
+          "name_score": 0.8470349311828613,
+          "intra_score": 0.9404371380805969,
+          "inter_score": 0.9379140138626099,
+          "hard_inter_class": "burglary",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 7,
+          "description": "person takes object from desk",
+          "score": 0.3395048677921295,
+          "name_score": 0.835371196269989,
+          "intra_score": 0.9238033890724182,
+          "inter_score": 0.9059487581253052,
+          "hard_inter_class": "burglary",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 2,
+          "description": "person takes bicycle",
+          "score": 0.3391442894935608,
+          "name_score": 0.8521875143051147,
+          "intra_score": 0.915440559387207,
+          "inter_score": 0.9212095737457275,
+          "hard_inter_class": "assault",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 19,
+          "description": "person carries stolen property away",
+          "score": 0.3349885642528534,
+          "name_score": 0.8366475701332092,
+          "intra_score": 0.9215872287750244,
+          "inter_score": 0.9204888939857483,
+          "hard_inter_class": "robbery",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    },
+    "vandalism": {
+      "candidate_count": 20,
+      "selected_count": 5,
+      "diversity_filter_enabled": false,
+      "selected": [
+        {
+          "index": 7,
+          "description": "person breaks sign",
+          "score": 0.3542773127555847,
+          "name_score": 0.8595134615898132,
+          "intra_score": 0.895764946937561,
+          "inter_score": 0.8608585000038147,
+          "hard_inter_class": "stealing",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 13,
+          "description": "person writes on wall",
+          "score": 0.34809982776641846,
+          "name_score": 0.8516611456871033,
+          "intra_score": 0.8564533591270447,
+          "inter_score": 0.8316687345504761,
+          "hard_inter_class": "burglary",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 19,
+          "description": "group destroys property",
+          "score": 0.34531018137931824,
+          "name_score": 0.8598222732543945,
+          "intra_score": 0.9224397540092468,
+          "inter_score": 0.9178354740142822,
+          "hard_inter_class": "robbery",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 15,
+          "description": "person destroys display",
+          "score": 0.3415946662425995,
+          "name_score": 0.8388190865516663,
+          "intra_score": 0.9011721611022949,
+          "inter_score": 0.8809487223625183,
+          "hard_inter_class": "stealing",
+          "weight": 0.20000000298023224
+        },
+        {
+          "index": 3,
+          "description": "person sprays paint on wall",
+          "score": 0.3362428545951843,
+          "name_score": 0.8201394081115723,
+          "intra_score": 0.8119360208511353,
+          "inter_score": 0.7846456170082092,
+          "hard_inter_class": "burglary",
+          "weight": 0.20000000298023224
+        }
+      ],
+      "diversity_rejections": []
+    }
+  }
+}

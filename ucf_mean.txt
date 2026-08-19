@@ -1,0 +1,1105 @@
+/kaggle/working/VadCLIP/src/clip/clip.py:6: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import packaging
+  0%|                                               | 0.00/335M [00:00<?, ?iB/s]  1%|▎                                     | 2.70M/335M [00:00<00:12, 28.2MiB/s]  2%|▉                                     | 8.00M/335M [00:00<00:08, 38.2MiB/s]  5%|█▊                                    | 16.0M/335M [00:00<00:21, 15.6MiB/s]  7%|██▋                                   | 24.0M/335M [00:01<00:14, 22.1MiB/s] 10%|███▋                                  | 32.0M/335M [00:01<00:11, 27.7MiB/s] 12%|████▌                                 | 40.0M/335M [00:01<00:10, 29.0MiB/s] 13%|████▉                                 | 43.3M/335M [00:02<00:16, 18.1MiB/s] 14%|█████▍                                | 48.0M/335M [00:02<00:14, 21.2MiB/s] 17%|██████▎                               | 56.0M/335M [00:02<00:10, 26.9MiB/s] 19%|███████▎                              | 64.0M/335M [00:02<00:08, 31.8MiB/s] 22%|████████▏                             | 72.0M/335M [00:02<00:07, 36.7MiB/s] 24%|█████████                             | 80.0M/335M [00:03<00:08, 31.2MiB/s] 25%|█████████▍                            | 83.6M/335M [00:03<00:13, 19.6MiB/s] 26%|█████████▉                            | 88.0M/335M [00:04<00:18, 13.8MiB/s] 29%|██████████▉                           | 96.0M/335M [00:04<00:13, 18.8MiB/s] 30%|███████████▏                          | 98.8M/335M [00:04<00:12, 19.9MiB/s] 31%|████████████                           | 104M/335M [00:04<00:10, 22.4MiB/s] 32%|████████████▍                          | 107M/335M [00:05<00:14, 16.2MiB/s] 33%|█████████████                          | 112M/335M [00:05<00:12, 19.1MiB/s] 34%|█████████████▎                         | 114M/335M [00:05<00:17, 13.2MiB/s] 36%|█████████████▉                         | 120M/335M [00:05<00:12, 17.4MiB/s] 38%|██████████████▉                        | 128M/335M [00:06<00:09, 23.1MiB/s] 41%|███████████████▊                       | 136M/335M [00:06<00:07, 28.0MiB/s] 43%|████████████████▊                      | 144M/335M [00:06<00:06, 32.6MiB/s] 45%|█████████████████▋                     | 152M/335M [00:06<00:05, 35.8MiB/s] 48%|██████████████████▋                    | 160M/335M [00:06<00:04, 38.3MiB/s] 50%|███████████████████▌                   | 168M/335M [00:07<00:04, 39.0MiB/s] 51%|████████████████████                   | 172M/335M [00:07<00:04, 39.2MiB/s] 53%|████████████████████▌                  | 176M/335M [00:07<00:08, 18.9MiB/s] 55%|█████████████████████▍                 | 184M/335M [00:08<00:12, 12.4MiB/s] 56%|█████████████████████▋                 | 186M/335M [00:09<00:15, 10.2MiB/s] 57%|██████████████████████▍                | 192M/335M [00:09<00:11, 13.1MiB/s] 60%|███████████████████████▎               | 200M/335M [00:09<00:08, 16.4MiB/s] 62%|████████████████████████▏              | 208M/335M [00:10<00:06, 20.9MiB/s] 63%|████████████████████████▌              | 211M/335M [00:10<00:05, 22.4MiB/s] 65%|█████████████████████████▏             | 216M/335M [00:10<00:04, 25.5MiB/s] 66%|█████████████████████████▌             | 219M/335M [00:10<00:04, 27.2MiB/s] 67%|██████████████████████████             | 224M/335M [00:10<00:03, 29.9MiB/s] 69%|███████████████████████████            | 232M/335M [00:12<00:10, 10.4MiB/s] 70%|███████████████████████████▎           | 235M/335M [00:13<00:16, 6.48MiB/s] 72%|███████████████████████████▉           | 240M/335M [00:13<00:11, 8.58MiB/s] 72%|████████████████████████████▏          | 242M/335M [00:14<00:12, 7.66MiB/s] 74%|████████████████████████████▉          | 248M/335M [00:14<00:08, 10.8MiB/s] 77%|█████████████████████████████▊         | 256M/335M [00:15<00:11, 7.26MiB/s] 77%|██████████████████████████████         | 258M/335M [00:17<00:16, 4.97MiB/s] 79%|██████████████████████████████▊        | 264M/335M [00:17<00:12, 6.16MiB/s] 81%|███████████████████████████████▋       | 272M/335M [00:17<00:06, 9.53MiB/s] 84%|████████████████████████████████▋      | 280M/335M [00:18<00:04, 13.3MiB/s] 86%|█████████████████████████████████▍     | 287M/335M [00:18<00:02, 17.5MiB/s] 87%|█████████████████████████████████▊     | 290M/335M [00:18<00:03, 12.4MiB/s] 88%|██████████████████████████████████▌    | 296M/335M [00:20<00:05, 7.59MiB/s] 89%|██████████████████████████████████▊    | 298M/335M [00:21<00:07, 5.05MiB/s] 91%|███████████████████████████████████▍   | 304M/335M [00:23<00:06, 4.69MiB/s] 91%|███████████████████████████████████▌   | 305M/335M [00:24<00:09, 3.41MiB/s] 93%|████████████████████████████████████▎  | 312M/335M [00:24<00:04, 5.67MiB/s] 94%|████████████████████████████████████▋  | 315M/335M [00:24<00:03, 6.72MiB/s] 96%|█████████████████████████████████████▎ | 320M/335M [00:25<00:01, 9.55MiB/s] 98%|██████████████████████████████████████▏| 328M/335M [00:25<00:00, 15.1MiB/s] 99%|██████████████████████████████████████▋| 332M/335M [00:25<00:00, 12.4MiB/s]100%|███████████████████████████████████████| 335M/335M [00:25<00:00, 13.6MiB/s]
+/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+epoch:  1 | step:  1280 | loss1:  0.6959296464920044 | loss2:  2.5115093101154673 | loss3:  0.09681235998868942
+AUC1:  0.778597082215527  AP1:  0.21523625843760202
+AUC2:  0.41681225348677886  AP2: 0.06165222940079749
+mAP@0.1 =1.57%
+mAP@0.2 =1.32%
+mAP@0.3 =1.05%
+mAP@0.4 =0.87%
+mAP@0.5 =0.83%
+average MAP: 1.13
+epoch:  1 | step:  2560 | loss1:  0.5283614091929936 | loss2:  2.384082351412092 | loss3:  0.09481125324964523
+AUC1:  0.8142183097673698  AP1:  0.24241571172467888
+AUC2:  0.6130191470908704  AP2: 0.11228458611928333
+mAP@0.1 =2.50%
+mAP@0.2 =2.22%
+mAP@0.3 =1.84%
+mAP@0.4 =1.68%
+mAP@0.5 =1.55%
+average MAP: 1.96
+epoch:  1 | step:  3840 | loss1:  0.45330413166553746 | loss2:  2.2504833167599094 | loss3:  0.09130562096834183
+AUC1:  0.8337742564991324  AP1:  0.25453837219250997
+AUC2:  0.7835013229257437  AP2: 0.20231856361752032
+mAP@0.1 =3.13%
+mAP@0.2 =2.24%
+mAP@0.3 =1.96%
+mAP@0.4 =1.49%
+mAP@0.5 =1.14%
+average MAP: 1.99
+epoch:  1 | step:  5120 | loss1:  0.40201536838601276 | loss2:  2.142477901970468 | loss3:  0.08047440648078918
+AUC1:  0.8387448102148085  AP1:  0.2555794264637873
+AUC2:  0.8042980878082755  AP2: 0.1934221709826326
+mAP@0.1 =5.08%
+mAP@0.2 =4.14%
+mAP@0.3 =3.54%
+mAP@0.4 =2.84%
+mAP@0.5 =2.65%
+average MAP: 3.65
+epoch:  1 | step:  6400 | loss1:  0.3673056527680042 | loss2:  2.0416821685491824 | loss3:  0.057937365025281906
+AUC1:  0.8421692721041856  AP1:  0.2630479655834661
+AUC2:  0.8079138717553861  AP2: 0.19707246177052418
+mAP@0.1 =3.62%
+mAP@0.2 =2.88%
+mAP@0.3 =1.79%
+mAP@0.4 =1.35%
+mAP@0.5 =0.75%
+average MAP: 2.08
+epoch:  1 | step:  7680 | loss1:  0.3412875635702102 | loss2:  1.953443019116511 | loss3:  0.041074249893426895
+AUC1:  0.8475674814605569  AP1:  0.2746933717261729
+AUC2:  0.8183248834073016  AP2: 0.20644602350368493
+mAP@0.1 =5.31%
+mAP@0.2 =4.07%
+mAP@0.3 =2.86%
+mAP@0.4 =1.79%
+mAP@0.5 =1.36%
+average MAP: 3.08
+epoch:  1 | step:  8960 | loss1:  0.32072892659147023 | loss2:  1.878427394678895 | loss3:  0.03481258079409599
+AUC1:  0.8542148495151718  AP1:  0.2809836538829682
+AUC2:  0.8273917052751227  AP2: 0.21533314978163698
+mAP@0.1 =8.66%
+mAP@0.2 =7.57%
+mAP@0.3 =4.79%
+mAP@0.4 =3.89%
+mAP@0.5 =3.49%
+average MAP: 5.68
+epoch:  1 | step:  10240 | loss1:  0.3092435482475493 | loss2:  1.8243440036420469 | loss3:  0.02753274142742157
+AUC1:  0.8553333163754557  AP1:  0.29222682842693853
+AUC2:  0.8363570713333737  AP2: 0.22396467608984238
+mAP@0.1 =8.21%
+mAP@0.2 =7.28%
+mAP@0.3 =5.90%
+mAP@0.4 =4.70%
+mAP@0.5 =3.78%
+average MAP: 5.97
+epoch:  1 | step:  11520 | loss1:  0.2947949423239781 | loss2:  1.7726046777033544 | loss3:  0.025439083576202393
+AUC1:  0.8576083381327932  AP1:  0.29461045057512414
+AUC2:  0.8354226177090716  AP2: 0.21769097879384686
+mAP@0.1 =7.00%
+mAP@0.2 =5.79%
+mAP@0.3 =4.87%
+mAP@0.4 =4.13%
+mAP@0.5 =3.17%
+average MAP: 4.99
+epoch:  1 | step:  12800 | loss1:  0.2826737535767036 | loss2:  1.7303895454595584 | loss3:  0.031330544501543045
+AUC1:  0.8543993099898437  AP1:  0.2743588251073572
+AUC2:  0.8349691374165766  AP2: 0.21269247485633216
+mAP@0.1 =7.44%
+mAP@0.2 =5.61%
+mAP@0.3 =4.38%
+mAP@0.4 =3.84%
+mAP@0.5 =3.01%
+average MAP: 4.86
+epoch:  1 | step:  14080 | loss1:  0.27080272775781045 | loss2:  1.6894370027490564 | loss3:  0.02652612328529358
+AUC1:  0.8579499889207873  AP1:  0.30346403442743985
+AUC2:  0.8400608523192861  AP2: 0.22338284505905268
+mAP@0.1 =6.17%
+mAP@0.2 =4.82%
+mAP@0.3 =3.53%
+mAP@0.4 =2.90%
+mAP@0.5 =2.15%
+average MAP: 3.92
+epoch:  1 | step:  15360 | loss1:  0.2589701140715071 | loss2:  1.6537451990379775 | loss3:  0.019699573516845703
+AUC1:  0.856923536555678  AP1:  0.3068109898085663
+AUC2:  0.8378300649334974  AP2: 0.2263689265324317
+mAP@0.1 =8.08%
+mAP@0.2 =6.26%
+mAP@0.3 =4.89%
+mAP@0.4 =4.23%
+mAP@0.5 =3.48%
+average MAP: 5.39
+epoch:  2 | step:  1280 | loss1:  0.11883604526519775 | loss2:  1.2227047031575984 | loss3:  0.019213294610381126
+AUC1:  0.8571372697571482  AP1:  0.30036450278267446
+AUC2:  0.8392705201117956  AP2: 0.2232356109619894
+mAP@0.1 =8.13%
+mAP@0.2 =6.02%
+mAP@0.3 =4.75%
+mAP@0.4 =3.64%
+mAP@0.5 =3.01%
+average MAP: 5.11
+epoch:  2 | step:  2560 | loss1:  0.11737556258837382 | loss2:  1.2147440172377086 | loss3:  0.023294975981116295
+AUC1:  0.8608830217680431  AP1:  0.311475047556626
+AUC2:  0.8437463181116538  AP2: 0.23129263843186537
+mAP@0.1 =7.56%
+mAP@0.2 =6.01%
+mAP@0.3 =4.48%
+mAP@0.4 =3.70%
+mAP@0.5 =3.10%
+average MAP: 4.97
+epoch:  2 | step:  3840 | loss1:  0.11420993266567107 | loss2:  1.2044240390100787 | loss3:  0.023631984367966652
+AUC1:  0.8615642856556107  AP1:  0.3123079377141689
+AUC2:  0.843451296081043  AP2: 0.23285310915479457
+mAP@0.1 =8.35%
+mAP@0.2 =7.33%
+mAP@0.3 =5.44%
+mAP@0.4 =3.93%
+mAP@0.5 =2.36%
+average MAP: 5.48
+epoch:  2 | step:  5120 | loss1:  0.11144276235888644 | loss2:  1.1906651113091447 | loss3:  0.017019594088196754
+AUC1:  0.866911621379298  AP1:  0.3262487811091777
+AUC2:  0.8493544104874355  AP2: 0.24174910696139637
+mAP@0.1 =8.37%
+mAP@0.2 =6.33%
+mAP@0.3 =4.16%
+mAP@0.4 =3.19%
+mAP@0.5 =2.54%
+average MAP: 4.92
+epoch:  2 | step:  6400 | loss1:  0.10970968972234164 | loss2:  1.1695900126999499 | loss3:  0.02049173228442669
+AUC1:  0.8717210845563073  AP1:  0.3328875634918946
+AUC2:  0.8546980197471841  AP2: 0.25301800911525224
+mAP@0.1 =9.77%
+mAP@0.2 =8.10%
+mAP@0.3 =5.66%
+mAP@0.4 =3.80%
+mAP@0.5 =2.06%
+average MAP: 5.88
+epoch:  2 | step:  7680 | loss1:  0.10872310601541253 | loss2:  1.1557699539622321 | loss3:  0.012234987691044807
+AUC1:  0.8644957341695371  AP1:  0.31935887489357234
+AUC2:  0.8449625164490423  AP2: 0.2437353268737692
+mAP@0.1 =10.17%
+mAP@0.2 =7.26%
+mAP@0.3 =5.40%
+mAP@0.4 =4.00%
+mAP@0.5 =3.51%
+average MAP: 6.07
+epoch:  2 | step:  8960 | loss1:  0.10936906267429741 | loss2:  1.1472070082812242 | loss3:  0.01632528379559517
+AUC1:  0.8653868858028253  AP1:  0.32094849730127484
+AUC2:  0.8514184566136433  AP2: 0.2518798815725109
+mAP@0.1 =9.00%
+mAP@0.2 =7.11%
+mAP@0.3 =4.43%
+mAP@0.4 =3.40%
+mAP@0.5 =2.89%
+average MAP: 5.36
+epoch:  2 | step:  10240 | loss1:  0.10662114141899863 | loss2:  1.1313912125281345 | loss3:  0.015431997366249561
+AUC1:  0.8670279672902561  AP1:  0.3105336222698872
+AUC2:  0.8485691161559652  AP2: 0.24776073968021486
+mAP@0.1 =10.34%
+mAP@0.2 =8.53%
+mAP@0.3 =4.66%
+mAP@0.4 =3.60%
+mAP@0.5 =2.78%
+average MAP: 5.98
+epoch:  2 | step:  11520 | loss1:  0.10586602248988308 | loss2:  1.1182226545208103 | loss3:  0.01586163602769375
+AUC1:  0.8695263679995449  AP1:  0.3170935458829214
+AUC2:  0.8509097978538949  AP2: 0.25089555838292105
+mAP@0.1 =11.39%
+mAP@0.2 =9.86%
+mAP@0.3 =6.21%
+mAP@0.4 =3.73%
+mAP@0.5 =2.21%
+average MAP: 6.68
+epoch:  2 | step:  12800 | loss1:  0.10242011268982792 | loss2:  1.104222608084726 | loss3:  0.014315569773316383
+AUC1:  0.8643978821251851  AP1:  0.30556676632354046
+AUC2:  0.8451865560650267  AP2: 0.24588761305995557
+mAP@0.1 =10.75%
+mAP@0.2 =8.81%
+mAP@0.3 =6.60%
+mAP@0.4 =4.18%
+mAP@0.5 =3.57%
+average MAP: 6.78
+epoch:  2 | step:  14080 | loss1:  0.10201326932187553 | loss2:  1.0925874087187621 | loss3:  0.01691526733338833
+AUC1:  0.8665440227774197  AP1:  0.3061794856571663
+AUC2:  0.85831024858227  AP2: 0.26052693185324
+mAP@0.1 =11.61%
+mAP@0.2 =8.85%
+mAP@0.3 =6.75%
+mAP@0.4 =4.76%
+mAP@0.5 =4.03%
+average MAP: 7.20
+epoch:  2 | step:  15360 | loss1:  0.09992804378271103 | loss2:  1.0809067098562382 | loss3:  0.01454392820596695
+AUC1:  0.870530033340245  AP1:  0.323295892145649
+AUC2:  0.8574553951042632  AP2: 0.26587154767608095
+mAP@0.1 =11.23%
+mAP@0.2 =9.23%
+mAP@0.3 =6.33%
+mAP@0.4 =4.85%
+mAP@0.5 =3.91%
+average MAP: 7.11
+epoch:  3 | step:  1280 | loss1:  0.098647840321064 | loss2:  1.0396659699353306 | loss3:  0.01886853389441967
+AUC1:  0.8627266123968618  AP1:  0.3055186264575879
+AUC2:  0.8443356002175274  AP2: 0.23910984667754226
+mAP@0.1 =9.73%
+mAP@0.2 =8.31%
+mAP@0.3 =4.90%
+mAP@0.4 =3.80%
+mAP@0.5 =2.71%
+average MAP: 5.89
+epoch:  3 | step:  2560 | loss1:  0.09593676562820162 | loss2:  1.0408429077693395 | loss3:  0.018599174916744232
+AUC1:  0.8645887525886093  AP1:  0.3034199225301116
+AUC2:  0.8463817379835619  AP2: 0.2396084673677225
+mAP@0.1 =9.18%
+mAP@0.2 =7.49%
+mAP@0.3 =5.40%
+mAP@0.4 =4.07%
+mAP@0.5 =3.35%
+average MAP: 5.90
+epoch:  3 | step:  3840 | loss1:  0.0954253731235381 | loss2:  1.0511292123025464 | loss3:  0.01761823706328869
+AUC1:  0.8678737849898199/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+  AP1:  0.31686135165911716
+AUC2:  0.853156666556596  AP2: 0.25385846097491527
+mAP@0.1 =11.41%
+mAP@0.2 =9.37%
+mAP@0.3 =4.86%
+mAP@0.4 =3.42%
+mAP@0.5 =2.66%
+average MAP: 6.34
+epoch:  3 | step:  5120 | loss1:  0.09233819266281477 | loss2:  1.0339607407407063 | loss3:  0.017771629616618156
+AUC1:  0.8678458450825082  AP1:  0.32351730830549974
+AUC2:  0.8523286254365554  AP2: 0.2563297203654193
+mAP@0.1 =10.95%
+mAP@0.2 =9.18%
+mAP@0.3 =5.11%
+mAP@0.4 =3.31%
+mAP@0.5 =2.49%
+average MAP: 6.21
+epoch:  3 | step:  6400 | loss1:  0.08903389234168857 | loss2:  1.0274811211754293 | loss3:  0.013747786171734333
+AUC1:  0.870853561694014  AP1:  0.31923848986622017
+AUC2:  0.8548443165641226  AP2: 0.2617729025702112
+mAP@0.1 =11.79%
+mAP@0.2 =10.06%
+mAP@0.3 =6.65%
+mAP@0.4 =4.59%
+mAP@0.5 =3.80%
+average MAP: 7.38
+epoch:  3 | step:  7680 | loss1:  0.08622997742695887 | loss2:  1.0036320686340332 | loss3:  0.01746036671102047
+AUC1:  0.8691887827650808  AP1:  0.3218617326234185
+AUC2:  0.8527016629094415  AP2: 0.26157927170114603
+mAP@0.1 =12.46%
+mAP@0.2 =8.95%
+mAP@0.3 =6.26%
+mAP@0.4 =4.85%
+mAP@0.5 =3.75%
+average MAP: 7.25
+epoch:  3 | step:  8960 | loss1:  0.08413173489167657 | loss2:  0.9893751379469751 | loss3:  0.017252249643206596
+AUC1:  0.8706936684872737  AP1:  0.3267029379113856
+AUC2:  0.8572090525863141  AP2: 0.2669218847324214
+mAP@0.1 =12.19%
+mAP@0.2 =9.62%
+mAP@0.3 =5.94%
+mAP@0.4 =3.56%
+mAP@0.5 =2.66%
+average MAP: 6.79
+epoch:  3 | step:  10240 | loss1:  0.08293004734096704 | loss2:  0.9787344417454283 | loss3:  0.01881042681634426
+AUC1:  0.8640431877403412  AP1:  0.31345884306554167
+AUC2:  0.8516447619856856  AP2: 0.25283545888745124
+mAP@0.1 =10.86%
+mAP@0.2 =8.59%
+mAP@0.3 =6.02%
+mAP@0.4 =4.57%
+mAP@0.5 =3.66%
+average MAP: 6.74
+epoch:  3 | step:  11520 | loss1:  0.08246395511777846 | loss2:  0.9693303920410492 | loss3:  0.016598602756857872
+AUC1:  0.8634504061260928  AP1:  0.28766951526978585
+AUC2:  0.8507715898852424  AP2: 0.25218200441998023
+mAP@0.1 =12.62%
+mAP@0.2 =10.52%
+mAP@0.3 =6.51%
+mAP@0.4 =5.00%
+mAP@0.5 =3.89%
+average MAP: 7.71
+epoch:  3 | step:  12800 | loss1:  0.08191075076413627 | loss2:  0.9568177201960346 | loss3:  0.014174053445458412
+AUC1:  0.8532357501449848  AP1:  0.28875224432354263
+AUC2:  0.8467046035418251  AP2: 0.24741920064215883
+mAP@0.1 =15.33%
+mAP@0.2 =11.25%
+mAP@0.3 =7.00%
+mAP@0.4 =4.81%
+mAP@0.5 =4.28%
+average MAP: 8.53
+epoch:  3 | step:  14080 | loss1:  0.0814434304027944 | loss2:  0.9487799738978481 | loss3:  0.015418781898915768
+AUC1:  0.8592560893706935  AP1:  0.30812168285333996
+AUC2:  0.8526508226389474  AP2: 0.26151834721988465
+mAP@0.1 =13.51%
+mAP@0.2 =9.88%
+mAP@0.3 =7.25%
+mAP@0.4 =5.07%
+mAP@0.5 =3.97%
+average MAP: 7.93
+epoch:  3 | step:  15360 | loss1:  0.08260602836520219 | loss2:  0.9405463126080096 | loss3:  0.018614595755934715
+AUC1:  0.8528035325955119  AP1:  0.29769094746626434
+AUC2:  0.8513190589731716  AP2: 0.2587224938715615
+mAP@0.1 =13.85%
+mAP@0.2 =10.20%
+mAP@0.3 =6.96%
+mAP@0.4 =5.40%
+mAP@0.5 =4.73%
+average MAP: 8.23
+epoch:  4 | step:  1280 | loss1:  0.09998908842151816 | loss2:  1.1011618050661953 | loss3:  0.013491160236299038
+AUC1:  0.8647775307793633  AP1:  0.3109425340746924
+AUC2:  0.8478827203295366  AP2: 0.24306412319592755
+mAP@0.1 =11.41%
+mAP@0.2 =9.24%
+mAP@0.3 =5.57%
+mAP@0.4 =4.30%
+mAP@0.5 =3.36%
+average MAP: 6.78
+epoch:  4 | step:  2560 | loss1:  0.10131111492713292 | loss2:  1.0825315827415103 | loss3:  0.013855362311005592
+AUC1:  0.8666571445107425  AP1:  0.32173904623540767
+AUC2:  0.8507821799710433  AP2: 0.24842043910476158
+mAP@0.1 =9.32%
+mAP@0.2 =7.40%
+mAP@0.3 =5.00%
+mAP@0.4 =3.93%
+mAP@0.5 =3.28%
+average MAP: 5.79
+epoch:  4 | step:  3840 | loss1:  0.09965233432669793 | loss2:  1.0704532092617405 | loss3:  0.014478728175163269
+AUC1:  0.8589850861706814  AP1:  0.3043152234185935
+AUC2:  0.8384867501543853  AP2: 0.24357381407629486
+mAP@0.1 =11.34%
+mAP@0.2 =8.74%
+mAP@0.3 =5.44%
+mAP@0.4 =4.28%
+mAP@0.5 =3.28%
+average MAP: 6.62
+epoch:  4 | step:  5120 | loss1:  0.10268657945278215 | loss2:  1.0614199900045627 | loss3:  0.015172255225479603
+AUC1:  0.859606959058484  AP1:  0.3152901624047262
+AUC2:  0.8432201847928733  AP2: 0.2502984042251973
+mAP@0.1 =10.47%
+mAP@0.2 =8.96%
+mAP@0.3 =6.64%
+mAP@0.4 =4.75%
+mAP@0.5 =3.46%
+average MAP: 6.86
+epoch:  4 | step:  6400 | loss1:  0.10186256037331094 | loss2:  1.050159142297857 | loss3:  0.01768600568175316
+AUC1:  0.8610098432212834  AP1:  0.31136420289926875
+AUC2:  0.8472256719241426  AP2: 0.2514956325417041
+mAP@0.1 =12.35%
+mAP@0.2 =10.06%
+mAP@0.3 =6.98%
+mAP@0.4 =4.91%
+mAP@0.5 =3.69%
+average MAP: 7.60
+epoch:  4 | step:  7680 | loss1:  0.10077223468755113 | loss2:  1.040671570379226 | loss3:  0.015628386288881302
+AUC1:  0.8635825232709429  AP1:  0.2968912257148728
+AUC2:  0.8458354686370504  AP2: 0.2467668629345471
+mAP@0.1 =12.92%
+mAP@0.2 =10.18%
+mAP@0.3 =6.51%
+mAP@0.4 =4.52%
+mAP@0.5 =3.79%
+average MAP: 7.58
+epoch:  4 | step:  8960 | loss1:  0.09612805367460553 | loss2:  1.0206414528296028 | loss3:  0.019227230921387672
+AUC1:  0.8644671760423119  AP1:  0.2890418091067248
+AUC2:  0.8496010536357848  AP2: 0.24875890979775195
+mAP@0.1 =13.16%
+mAP@0.2 =11.32%
+mAP@0.3 =6.83%
+mAP@0.4 =5.84%
+mAP@0.5 =3.46%
+average MAP: 8.12
+epoch:  4 | step:  10240 | loss1:  0.09218361410369844 | loss2:  1.0018592727037123 | loss3:  0.015265603549778461
+AUC1:  0.86838976267265  AP1:  0.2979384004711907
+AUC2:  0.8529848605458981  AP2: 0.2592795761841715
+mAP@0.1 =11.32%
+mAP@0.2 =8.69%
+mAP@0.3 =5.95%
+mAP@0.4 =4.70%
+mAP@0.5 =3.74%
+average MAP: 6.88
+epoch:  4 | step:  11520 | loss1:  0.08896225721544616 | loss2:  0.9847824141219422 | loss3:  0.015211445279419422
+AUC1:  0.8641022985903837  AP1:  0.2999867501744349
+AUC2:  0.8526075230574248  AP2: 0.25728730935960475
+mAP@0.1 =12.17%
+mAP@0.2 =8.75%
+mAP@0.3 =6.48%
+mAP@0.4 =4.57%
+mAP@0.5 =3.87%
+average MAP: 7.17
+epoch:  4 | step:  12800 | loss1:  0.08703829593366326 | loss2:  0.9749890152770694 | loss3:  0.015245990827679634
+AUC1:  0.8681601750171586  AP1:  0.3170714469142659
+AUC2:  0.852876988631174  AP2: 0.26269409623404466
+mAP@0.1 =11.51%
+mAP@0.2 =7.98%
+mAP@0.3 =5.61%
+mAP@0.4 =4.02%
+mAP@0.5 =3.28%
+average MAP: 6.48
+epoch:  4 | step:  14080 | loss1:  0.08487335822402357 | loss2:  0.9622526748760326 | loss3:  0.016747577115893364
+AUC1:  0.8664221951806433  AP1:  0.3012597820343864
+AUC2:  0.8588454435351905  AP2: 0.26717245041999643
+mAP@0.1 =13.17%
+mAP@0.2 =9.28%
+mAP@0.3 =5.81%
+mAP@0.4 =4.20%
+mAP@0.5 =2.51%
+average MAP: 6.99
+epoch:  4 | step:  15360 | loss1:  0.08356498577439588 | loss2:  0.9500166596459948 | loss3:  0.01700081303715706
+AUC1:  0.8710074079111628  AP1:  0.3067965002979116
+AUC2:  0.859129444273696  AP2: 0.26849171602247823
+mAP@0.1 =11.55%
+mAP@0.2 =8.29%
+mAP@0.3 =4.92%
+mAP@0.4 =4.01%
+mAP@0.5 =2.20%
+average MAP: 6.19
+epoch:  5 | step:  1280 | loss1:  0.10788492993874983 | loss2:  1.0798612291162664 | loss3:  0.018903151154518127
+AUC1:  0.8707746977400423  AP1:  0.33013377312018144
+AUC2:  0.8539331321405466  AP2: 0.25100810479832947
+mAP@0.1 =8.91%
+mAP@0.2 =7.34%
+mAP@0.3 =5.12%
+mAP@0.4 =3.43%
+mAP@0.5 =2.47%
+average MAP: 5.45
+epoch:  5 | step:  2560 | loss1:  0.1010639685250464 | loss2:  1.0797146643911089 | loss3:  0.018599269911646843
+AUC1:  0.8701867593890394  AP1:  0.32938507189088245
+AUC2:  0.8526157490613808  AP2: 0.24932947410371728
+mAP@0.1 =8.88%
+mAP@0.2 =7.53%
+mAP@0.3 =5.28%
+mAP@0.4 =3.54%
+mAP@0.5 =2.59%
+average MAP: 5.56
+epoch:  5 | step:  3840 | loss1:  0.10263836768365675 | loss2:  1.078896209116905 | loss3:  0.01871577464044094
+AUC1:  0.8692145777616005  AP1:  0.3275929513888458
+AUC2:  0.8513818132523693  AP2: 0.24811807012457193
+mAP@0.1 =8.90%
+mAP@0.2 =7.39%
+mAP@0.3 =4.54%
+mAP@0.4 =3.42%
+mAP@0.5 =2.58%
+average MAP: 5.37
+epoch:  5 | step:  5120 | loss1:  0.09735025892533906 | loss2:  1.0777314944965084 | loss3:  0.019334152340888977
+AUC1:  0.8685650115686729  AP1:  0.3261480595540809
+AUC2:  0.8505462509046343  AP2: 0.2468436428272201
+mAP@0.1 =9.14%
+mAP@0.2 =7.71%
+mAP@0.3 =4.54%
+mAP@0.4 =3.17%
+mAP@0.5 =2.28%
+average MAP: 5.37
+epoch:  5 | step:  6400 | loss1:  0.09512126737949896 | loss2:  1.078476024608986 | loss3:  0.018357757478952408
+AUC1:  0.8679893460552606  AP1:  0.3255490398700464
+AUC2:  0.8505780760243052  AP2: 0.24765125671264449
+mAP@0.1 =8.97%/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+
+mAP@0.2 =7.40%
+mAP@0.3 =4.52%
+mAP@0.4 =3.49%
+mAP@0.5 =2.64%
+average MAP: 5.41
+epoch:  5 | step:  7680 | loss1:  0.09299719639000345 | loss2:  1.0756096986473584 | loss3:  0.017179446294903755
+AUC1:  0.8677189488423587  AP1:  0.32444581225722713
+AUC2:  0.8505863836729535  AP2: 0.24754089504204949
+mAP@0.1 =8.88%
+mAP@0.2 =7.25%
+mAP@0.3 =4.43%
+mAP@0.4 =3.32%
+mAP@0.5 =2.71%
+average MAP: 5.32
+epoch:  5 | step:  8960 | loss1:  0.09160825620654603 | loss2:  1.0692528931187912 | loss3:  0.01986689306795597
+AUC1:  0.8678051390405592  AP1:  0.3243204960762236
+AUC2:  0.8510792291253817  AP2: 0.24756137807602008
+mAP@0.1 =9.23%
+mAP@0.2 =7.82%
+mAP@0.3 =4.22%
+mAP@0.4 =3.27%
+mAP@0.5 =2.30%
+average MAP: 5.37
+epoch:  5 | step:  10240 | loss1:  0.09403397078499381 | loss2:  1.0733611900129436 | loss3:  0.017970286309719086
+AUC1:  0.868583622388289  AP1:  0.3258793415654158
+AUC2:  0.8522000780460244  AP2: 0.24986864936040917
+mAP@0.1 =8.94%
+mAP@0.2 =7.31%
+mAP@0.3 =4.41%
+mAP@0.4 =3.42%
+mAP@0.5 =2.73%
+average MAP: 5.36
+epoch:  5 | step:  11520 | loss1:  0.0936262900685216 | loss2:  1.0689201597329026 | loss3:  0.01867423579096794
+AUC1:  0.869027663683207  AP1:  0.3281172461736944
+AUC2:  0.8529789852789114  AP2: 0.25035801214642533
+mAP@0.1 =9.04%
+mAP@0.2 =7.64%
+mAP@0.3 =4.76%
+mAP@0.4 =3.46%
+mAP@0.5 =2.74%
+average MAP: 5.53
+epoch:  5 | step:  12800 | loss1:  0.09270893214362683 | loss2:  1.06448632242656 | loss3:  0.01924365572631359
+AUC1:  0.86826716181445  AP1:  0.3283144999107326
+AUC2:  0.8522961709762411  AP2: 0.24956088853494376
+mAP@0.1 =9.05%
+mAP@0.2 =7.55%
+mAP@0.3 =4.66%
+mAP@0.4 =3.48%
+mAP@0.5 =2.76%
+average MAP: 5.50
+epoch:  5 | step:  14080 | loss1:  0.09341402116928015 | loss2:  1.0600832561114888 | loss3:  0.01734563149511814
+AUC1:  0.867976941807711  AP1:  0.3273905368142007
+AUC2:  0.8520796157968694  AP2: 0.24997385182663878
+mAP@0.1 =9.78%
+mAP@0.2 =8.14%
+mAP@0.3 =5.17%
+mAP@0.4 =4.09%
+mAP@0.5 =3.41%
+average MAP: 6.12
+epoch:  5 | step:  15360 | loss1:  0.09245684625934963 | loss2:  1.0579717090307188 | loss3:  0.01851179637014866
+AUC1:  0.868645310930865  AP1:  0.32810185898184924
+AUC2:  0.8522673565161902  AP2: 0.2508584491936703
+mAP@0.1 =9.65%
+mAP@0.2 =8.33%
+mAP@0.3 =4.97%
+mAP@0.4 =3.72%
+mAP@0.5 =2.95%
+average MAP: 5.92
+epoch:  6 | step:  1280 | loss1:  0.09050299667499283 | loss2:  1.0838422125036067 | loss3:  0.02006530947983265
+AUC1:  0.8712261278332951  AP1:  0.3334661688925368
+AUC2:  0.8539697480706868  AP2: 0.2521539410318941
+mAP@0.1 =9.78%
+mAP@0.2 =8.00%
+mAP@0.3 =5.25%
+mAP@0.4 =3.51%
+mAP@0.5 =2.40%
+average MAP: 5.79
+epoch:  6 | step:  2560 | loss1:  0.09334079903506097 | loss2:  1.096267336890811 | loss3:  0.020177068188786507
+AUC1:  0.8702096899635383  AP1:  0.33288225973733265
+AUC2:  0.8524700851993225  AP2: 0.25013163583971354
+mAP@0.1 =8.65%
+mAP@0.2 =7.28%
+mAP@0.3 =4.88%
+mAP@0.4 =3.21%
+mAP@0.5 =2.24%
+average MAP: 5.25
+epoch:  6 | step:  3840 | loss1:  0.09818786298555712 | loss2:  1.0986445796105169 | loss3:  0.018671253696084023
+AUC1:  0.8691801088737257  AP1:  0.33014949867840226
+AUC2:  0.8514874793703046  AP2: 0.2493254091591615
+mAP@0.1 =9.09%
+mAP@0.2 =7.35%
+mAP@0.3 =4.36%
+mAP@0.4 =3.36%
+mAP@0.5 =2.58%
+average MAP: 5.35
+epoch:  6 | step:  5120 | loss1:  0.10022235579970407 | loss2:  1.0971526372723464 | loss3:  0.018583593890070915
+AUC1:  0.8686284502361272  AP1:  0.32761265073284257
+AUC2:  0.8510228137549373  AP2: 0.2486106876723694
+mAP@0.1 =9.34%
+mAP@0.2 =7.79%
+mAP@0.3 =4.64%
+mAP@0.4 =3.51%
+mAP@0.5 =2.60%
+average MAP: 5.57
+epoch:  6 | step:  6400 | loss1:  0.0959662818441204 | loss2:  1.0779758668413348 | loss3:  0.01849689520895481
+AUC1:  0.868862911644199  AP1:  0.3256943698158942
+AUC2:  0.8509489572803237  AP2: 0.2482708614448505
+mAP@0.1 =9.20%
+mAP@0.2 =7.74%
+mAP@0.3 =4.49%
+mAP@0.4 =3.52%
+mAP@0.5 =2.68%
+average MAP: 5.52
+epoch:  6 | step:  7680 | loss1:  0.0923489221051091 | loss2:  1.0720620438700816 | loss3:  0.018111277371644974
+AUC1:  0.8688174242444012  AP1:  0.3260700264020582
+AUC2:  0.851019901328432  AP2: 0.24841630044286706
+mAP@0.1 =8.92%
+mAP@0.2 =7.40%
+mAP@0.3 =4.36%
+mAP@0.4 =3.42%
+mAP@0.5 =2.62%
+average MAP: 5.34
+epoch:  6 | step:  8960 | loss1:  0.09204694859578576 | loss2:  1.071156576485701 | loss3:  0.0186169296503067
+AUC1:  0.8693659362714559  AP1:  0.33009497565551854
+AUC2:  0.8508259627482828  AP2: 0.24808691281133954
+mAP@0.1 =8.65%
+mAP@0.2 =7.16%
+mAP@0.3 =4.54%
+mAP@0.4 =3.44%
+mAP@0.5 =2.62%
+average MAP: 5.28
+epoch:  6 | step:  10240 | loss1:  0.09277288381148267 | loss2:  1.0678378770380845 | loss3:  0.018787769600749016
+AUC1:  0.8696913989835298  AP1:  0.33379207292213176
+AUC2:  0.8504033904859278  AP2: 0.2477457814893265
+mAP@0.1 =10.27%
+mAP@0.2 =8.51%
+mAP@0.3 =5.61%
+mAP@0.4 =4.25%
+mAP@0.5 =3.48%
+average MAP: 6.42
+epoch:  6 | step:  11520 | loss1:  0.0925603493802495 | loss2:  1.065492318881737 | loss3:  0.01905704289674759
+AUC1:  0.8683006751536025  AP1:  0.33261821124548274
+AUC2:  0.8492686803167646  AP2: 0.24565406911454693
+mAP@0.1 =9.37%
+mAP@0.2 =7.96%
+mAP@0.3 =4.97%
+mAP@0.4 =3.72%
+mAP@0.5 =2.89%
+average MAP: 5.78
+epoch:  6 | step:  12800 | loss1:  0.093435550126994 | loss2:  1.0626903194012027 | loss3:  0.018015701323747635
+AUC1:  0.8677197386922044  AP1:  0.33068243865424235
+AUC2:  0.849653417538957  AP2: 0.24578195240514128
+mAP@0.1 =10.20%
+mAP@0.2 =8.50%
+mAP@0.3 =5.57%
+mAP@0.4 =4.29%
+mAP@0.5 =3.61%
+average MAP: 6.43
+epoch:  6 | step:  14080 | loss1:  0.09235866371173042 | loss2:  1.061345664230553 | loss3:  0.01749756745994091
+AUC1:  0.8681239665690988  AP1:  0.3307254317010781
+AUC2:  0.8509445113051561  AP2: 0.24733106831199003
+mAP@0.1 =10.37%
+mAP@0.2 =8.22%
+mAP@0.3 =5.31%
+mAP@0.4 =3.97%
+mAP@0.5 =3.40%
+average MAP: 6.25
+epoch:  6 | step:  15360 | loss1:  0.09209865094585852 | loss2:  1.0590863094842138 | loss3:  0.018462559208273888
+AUC1:  0.8683357028581582  AP1:  0.33027601070036666
+AUC2:  0.8515567149962717  AP2: 0.24780939660967566
+mAP@0.1 =10.24%
+mAP@0.2 =8.73%
+mAP@0.3 =5.09%
+mAP@0.4 =3.66%
+mAP@0.5 =3.00%
+average MAP: 6.14
+epoch:  7 | step:  1280 | loss1:  0.08747184615243565 | loss2:  1.058548623865301 | loss3:  0.02006772719323635
+AUC1:  0.8712147019319644  AP1:  0.33297935052715866
+AUC2:  0.8545978647850017  AP2: 0.25227242642643277
+mAP@0.1 =9.42%
+mAP@0.2 =8.03%
+mAP@0.3 =5.32%
+mAP@0.4 =3.32%
+mAP@0.5 =2.14%
+average MAP: 5.65
+epoch:  7 | step:  2560 | loss1:  0.09048668082271304 | loss2:  1.058505308060419 | loss3:  0.019256988540291786
+AUC1:  0.8698514667857307  AP1:  0.33121598488372794
+AUC2:  0.8527776097105977  AP2: 0.249989467768049
+mAP@0.1 =8.91%
+mAP@0.2 =7.32%
+mAP@0.3 =5.09%
+mAP@0.4 =3.17%
+mAP@0.5 =2.33%
+average MAP: 5.36
+epoch:  7 | step:  3840 | loss1:  0.10031080462278859 | loss2:  1.0705367826646375 | loss3:  0.018732553347945213
+AUC1:  0.8695179220831541  AP1:  0.3277797305380207
+AUC2:  0.8521448509255769  AP2: 0.2489867798122021
+mAP@0.1 =9.24%
+mAP@0.2 =7.63%
+mAP@0.3 =4.76%
+mAP@0.4 =3.33%
+mAP@0.5 =2.55%
+average MAP: 5.50
+epoch:  7 | step:  5120 | loss1:  0.0979144787643014 | loss2:  1.066774728821545 | loss3:  0.01989079639315605
+AUC1:  0.8688802755519678  AP1:  0.32398470429882853
+AUC2:  0.8513579692025766  AP2: 0.24705411543460265
+mAP@0.1 =9.13%
+mAP@0.2 =7.66%
+mAP@0.3 =4.44%
+mAP@0.4 =3.23%
+mAP@0.5 =2.21%
+average MAP: 5.33
+epoch:  7 | step:  6400 | loss1:  0.09680146943120395 | loss2:  1.0701642761043473 | loss3:  0.01820148341357708
+AUC1:  0.8688211685015081  AP1:  0.32505218729601787
+AUC2:  0.8509500955797085  AP2: 0.2477322289748644
+mAP@0.1 =9.23%
+mAP@0.2 =7.47%
+mAP@0.3 =4.60%
+mAP@0.4 =3.35%
+mAP@0.5 =2.66%
+average MAP: 5.46
+epoch:  7 | step:  7680 | loss1:  0.09533840784283935 | loss2:  1.0682566595859215 | loss3:  0.01803082600235939
+AUC1:  0.8681721687244268  AP1:  0.3261910581612365
+AUC2:  0.8510024977567263  AP2: 0.248622547165907
+mAP@0.1 =9.03%
+mAP@0.2 =7.48%
+mAP@0.3 =4.48%
+mAP@0.4 =3.46%
+mAP@0.5 =2.63%
+average MAP: 5.42
+epoch:  7 | step:  8960 | loss1:  0.09522221982479095 | loss2:  1.068013608455658 | loss3:  0.01928652822971344
+AUC1:  0.8678074990448035  AP1:  0.3256331247201931
+AUC2:  0.8509923573191069  AP2: 0.24843149265763612
+mAP@0.1 =9.27%
+mAP@0.2 =7.90%
+mAP@0.3 =4.62%
+mAP@0.4 =3.33%
+mAP@0.5 =2.30%
+average MAP: 5.48
+epoch:  7 | step:  10240 | loss1:  0.09398358775141799/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+ | loss2:  1.0693908863597446 | loss3:  0.01749938540160656
+AUC1:  0.867186994562823  AP1:  0.3268931997030254
+AUC2:  0.8508548028786855  AP2: 0.2490848362838697
+mAP@0.1 =9.25%
+mAP@0.2 =7.57%
+mAP@0.3 =4.59%
+mAP@0.4 =3.45%
+mAP@0.5 =2.73%
+average MAP: 5.52
+epoch:  7 | step:  11520 | loss1:  0.09266694913526158 | loss2:  1.0634413715247268 | loss3:  0.017373180016875267
+AUC1:  0.8668284570390483  AP1:  0.32621022504427505
+AUC2:  0.8507203988483906  AP2: 0.2489589057769806
+mAP@0.1 =9.22%
+mAP@0.2 =7.58%
+mAP@0.3 =4.63%
+mAP@0.4 =3.50%
+mAP@0.5 =2.74%
+average MAP: 5.53
+epoch:  7 | step:  12800 | loss1:  0.09172668245316733 | loss2:  1.0626307489848372 | loss3:  0.018860848620533943
+AUC1:  0.8668181642474285  AP1:  0.32576407890346726
+AUC2:  0.8500062732037738  AP2: 0.24774401323646278
+mAP@0.1 =9.41%
+mAP@0.2 =7.92%
+mAP@0.3 =4.81%
+mAP@0.4 =3.53%
+mAP@0.5 =2.79%
+average MAP: 5.69
+epoch:  7 | step:  14080 | loss1:  0.09127807905813595 | loss2:  1.059235455753567 | loss3:  0.01843366026878357
+AUC1:  0.8666474384303009  AP1:  0.3247247025079346
+AUC2:  0.8508300044849162  AP2: 0.2477415654734855
+mAP@0.1 =9.78%
+mAP@0.2 =8.26%
+mAP@0.3 =4.72%
+mAP@0.4 =3.49%
+mAP@0.5 =2.78%
+average MAP: 5.81
+epoch:  7 | step:  15360 | loss1:  0.09172196138249941 | loss2:  1.0596371524590107 | loss3:  0.018479783087968826
+AUC1:  0.8664902018732765  AP1:  0.32456022366404996
+AUC2:  0.8506707919595226  AP2: 0.24736356369733656
+mAP@0.1 =10.18%
+mAP@0.2 =8.75%
+mAP@0.3 =5.05%
+mAP@0.4 =3.76%
+mAP@0.5 =3.01%
+average MAP: 6.15
+epoch:  8 | step:  1280 | loss1:  0.1011410927907987 | loss2:  1.127708001570268 | loss3:  0.020986225455999374
+AUC1:  0.8710704083291835  AP1:  0.3335173449887092
+AUC2:  0.8544390142393681  AP2: 0.25091509279053825
+mAP@0.1 =9.17%
+mAP@0.2 =7.56%
+mAP@0.3 =5.34%
+mAP@0.4 =3.39%
+mAP@0.5 =2.20%
+average MAP: 5.53
+epoch:  8 | step:  2560 | loss1:  0.10339165993389629 | loss2:  1.1077220695359367 | loss3:  0.018389759585261345
+AUC1:  0.8696505490208005  AP1:  0.32975061000666805
+AUC2:  0.8527460690962684  AP2: 0.24922603321281372
+mAP@0.1 =9.27%
+mAP@0.2 =7.65%
+mAP@0.3 =5.35%
+mAP@0.4 =3.63%
+mAP@0.5 =2.64%
+average MAP: 5.71
+epoch:  8 | step:  3840 | loss1:  0.10375833018652854 | loss2:  1.0995365900378073 | loss3:  0.017031744122505188
+AUC1:  0.8699653620584952  AP1:  0.32912948133878095
+AUC2:  0.8526156499015385  AP2: 0.24909167923470193
+mAP@0.1 =8.93%
+mAP@0.2 =7.36%
+mAP@0.3 =4.35%
+mAP@0.4 =3.18%
+mAP@0.5 =2.46%
+average MAP: 5.26
+epoch:  8 | step:  5120 | loss1:  0.10144854963916104 | loss2:  1.0860700127555103 | loss3:  0.019644392654299736
+AUC1:  0.8690802267401185  AP1:  0.3278176358538155
+AUC2:  0.8506256603304109  AP2: 0.24685212011723695
+mAP@0.1 =8.90%
+mAP@0.2 =7.66%
+mAP@0.3 =5.31%
+mAP@0.4 =3.27%
+mAP@0.5 =2.22%
+average MAP: 5.47
+epoch:  8 | step:  6400 | loss1:  0.09879938534954015 | loss2:  1.0820338340366589 | loss3:  0.01862133853137493
+AUC1:  0.8684857303093093  AP1:  0.3270520155746016
+AUC2:  0.8515529821379132  AP2: 0.24797642169531559
+mAP@0.1 =9.39%
+mAP@0.2 =7.99%
+mAP@0.3 =4.73%
+mAP@0.4 =3.63%
+mAP@0.5 =2.66%
+average MAP: 5.68
+epoch:  8 | step:  7680 | loss1:  0.09697569509754415 | loss2:  1.0787257532604406 | loss3:  0.01735706999897957
+AUC1:  0.8686575768179992  AP1:  0.3260762012979391
+AUC2:  0.8500371015353487  AP2: 0.24684384341020746
+mAP@0.1 =9.06%
+mAP@0.2 =7.55%
+mAP@0.3 =4.53%
+mAP@0.4 =3.39%
+mAP@0.5 =2.69%
+average MAP: 5.44
+epoch:  8 | step:  8960 | loss1:  0.09546585428253027 | loss2:  1.0748624986326192 | loss3:  0.01804192364215851
+AUC1:  0.8683896776917386  AP1:  0.3275001637322519
+AUC2:  0.8517790820544692  AP2: 0.24864390541402065
+mAP@0.1 =9.23%
+mAP@0.2 =7.73%
+mAP@0.3 =4.64%
+mAP@0.4 =3.52%
+mAP@0.5 =2.70%
+average MAP: 5.57
+epoch:  8 | step:  10240 | loss1:  0.09539542986470977 | loss2:  1.0680777783747073 | loss3:  0.018073683604598045
+AUC1:  0.8682268025539305  AP1:  0.3274641367634794
+AUC2:  0.8516632523307271  AP2: 0.24925532794757296
+mAP@0.1 =9.05%
+mAP@0.2 =7.55%
+mAP@0.3 =4.45%
+mAP@0.4 =3.48%
+mAP@0.5 =2.76%
+average MAP: 5.46
+epoch:  8 | step:  11520 | loss1:  0.09342039257779226 | loss2:  1.0643806116921561 | loss3:  0.018487153574824333
+AUC1:  0.868161524888431  AP1:  0.3270766262111917
+AUC2:  0.8517157742409376  AP2: 0.24932187891591512
+mAP@0.1 =9.08%
+mAP@0.2 =7.58%
+mAP@0.3 =4.56%
+mAP@0.4 =3.47%
+mAP@0.5 =2.76%
+average MAP: 5.49
+epoch:  8 | step:  12800 | loss1:  0.09294274807123855 | loss2:  1.0647043810032382 | loss3:  0.019252467900514603
+AUC1:  0.8676874975645601  AP1:  0.3257287029979042
+AUC2:  0.8513023597143639  AP2: 0.24862733471026807
+mAP@0.1 =9.26%
+mAP@0.2 =7.81%
+mAP@0.3 =4.54%
+mAP@0.4 =3.48%
+mAP@0.5 =2.79%
+average MAP: 5.57
+epoch:  8 | step:  14080 | loss1:  0.09156851034175169 | loss2:  1.0613074420808672 | loss3:  0.01830267906188965
+AUC1:  0.8676739506620068  AP1:  0.32547089732679796
+AUC2:  0.8508373819771756  AP2: 0.24885103786556342
+mAP@0.1 =9.02%
+mAP@0.2 =7.44%
+mAP@0.3 =4.63%
+mAP@0.4 =3.48%
+mAP@0.5 =2.79%
+average MAP: 5.47
+epoch:  8 | step:  15360 | loss1:  0.09148110076785088 | loss2:  1.058860828561231 | loss3:  0.020435290411114693
+AUC1:  0.8675333276414967  AP1:  0.3254813018802851
+AUC2:  0.8507152580129457  AP2: 0.24796425127669508
+mAP@0.1 =9.54%
+mAP@0.2 =8.18%
+mAP@0.3 =4.77%
+mAP@0.4 =3.60%
+mAP@0.5 =2.58%
+average MAP: 5.73
+epoch:  9 | step:  1280 | loss1:  0.09442876821214502 | loss2:  1.0763444250280207 | loss3:  0.018884435296058655
+AUC1:  0.8715784269055772  AP1:  0.3326842972289416
+AUC2:  0.8546622569623776  AP2: 0.2528897670099608
+mAP@0.1 =9.84%
+mAP@0.2 =8.18%
+mAP@0.3 =5.08%
+mAP@0.4 =3.82%
+mAP@0.5 =2.08%
+average MAP: 5.80
+epoch:  9 | step:  2560 | loss1:  0.09658394150790714 | loss2:  1.1062027159191312 | loss3:  0.01896904781460762
+AUC1:  0.87131884942155  AP1:  0.33235916384213116
+AUC2:  0.8545083069517492  AP2: 0.2525498836858468
+mAP@0.1 =9.77%
+mAP@0.2 =8.15%
+mAP@0.3 =5.06%
+mAP@0.4 =3.92%
+mAP@0.5 =2.12%
+average MAP: 5.81
+epoch:  9 | step:  3840 | loss1:  0.09936397114107685 | loss2:  1.0925054780898555 | loss3:  0.01914338767528534
+AUC1:  0.8712119874544524  AP1:  0.3325228268213299
+AUC2:  0.8542944394674646  AP2: 0.252174217414668
+mAP@0.1 =9.09%
+mAP@0.2 =7.23%
+mAP@0.3 =5.06%
+mAP@0.4 =3.23%
+mAP@0.5 =2.13%
+average MAP: 5.35
+epoch:  9 | step:  5120 | loss1:  0.09758805020189867 | loss2:  1.0928634085306308 | loss3:  0.01933634653687477
+AUC1:  0.8710986620264259  AP1:  0.3325804463111419
+AUC2:  0.8540737900060105  AP2: 0.25181065251566137
+mAP@0.1 =9.47%
+mAP@0.2 =7.65%
+mAP@0.3 =5.46%
+mAP@0.4 =3.59%
+mAP@0.5 =2.48%
+average MAP: 5.73
+epoch:  9 | step:  6400 | loss1:  0.09824152948225245 | loss2:  1.0920683052025588 | loss3:  0.019322233274579048
+AUC1:  0.8708805896087959  AP1:  0.3325441886392458
+AUC2:  0.8538239780983302  AP2: 0.25149620925772276
+mAP@0.1 =9.21%
+mAP@0.2 =7.59%
+mAP@0.3 =5.39%
+mAP@0.4 =3.58%
+mAP@0.5 =2.48%
+average MAP: 5.65
+epoch:  9 | step:  7680 | loss1:  0.09933354119296933 | loss2:  1.0892144324349575 | loss3:  0.01955932378768921
+AUC1:  0.8707518179502105  AP1:  0.33273342360224634
+AUC2:  0.853653997184765  AP2: 0.2511395684107178
+mAP@0.1 =9.28%
+mAP@0.2 =7.78%
+mAP@0.3 =5.40%
+mAP@0.4 =3.69%
+mAP@0.5 =2.61%
+average MAP: 5.75
+epoch:  9 | step:  8960 | loss1:  0.10131669432764322 | loss2:  1.087082674805547 | loss3:  0.01968226209282875
+AUC1:  0.8706130952771061  AP1:  0.33279515436966256
+AUC2:  0.8535627135995674  AP2: 0.25088229679421226
+mAP@0.1 =9.46%
+mAP@0.2 =7.94%
+mAP@0.3 =5.53%
+mAP@0.4 =3.88%
+mAP@0.5 =2.68%
+average MAP: 5.90
+epoch:  9 | step:  10240 | loss1:  0.09999919296414764 | loss2:  1.0832053540665427 | loss3:  0.019501229748129845
+AUC1:  0.8705246041998757  AP1:  0.3330054582810305
+AUC2:  0.8534452276284423  AP2: 0.2507894953016247
+mAP@0.1 =9.20%
+mAP@0.2 =7.65%
+mAP@0.3 =5.29%
+mAP@0.4 =3.60%
+mAP@0.5 =2.65%
+average MAP: 5.68
+epoch:  9 | step:  11520 | loss1:  0.09994223922654823 | loss2:  1.0863019824028015 | loss3:  0.01924656145274639
+AUC1:  0.8705191675530135  AP1:  0.33326797594781166
+AUC2:  0.8533230174785551  AP2: 0.2507729947667213
+mAP@0.1 =8.86%
+mAP@0.2 =7.32%
+mAP@0.3 =4.95%
+mAP@0.4 =3.31%
+mAP@0.5 =2.34%
+average MAP: 5.36
+epoch:  9 | step:  12800 | loss1:  0.10036612047564865 | loss2:  1.0850315926098588 | loss3:  0.01908205822110176
+AUC1:  0.8705191476283722  AP1:  0.3333766064953442
+AUC2: /kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+/kaggle/working/VadCLIP/src/ucf_train.py:116: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+/kaggle/working/VadCLIP/src/ucf_train.py:119: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  checkpoint = torch.load(args.checkpoint_path)
+ 0.8532138516668994  AP2: 0.25070537431017403
+mAP@0.1 =8.62%
+mAP@0.2 =7.14%
+mAP@0.3 =4.94%
+mAP@0.4 =3.29%
+mAP@0.5 =2.31%
+average MAP: 5.26
+epoch:  9 | step:  14080 | loss1:  0.0996614323408754 | loss2:  1.0847292386733733 | loss3:  0.01910005882382393
+AUC1:  0.8704492192736011  AP1:  0.3331733082442269
+AUC2:  0.8530686660889026  AP2: 0.2504486121710549
+mAP@0.1 =8.71%
+mAP@0.2 =7.16%
+mAP@0.3 =5.00%
+mAP@0.4 =3.29%
+mAP@0.5 =2.31%
+average MAP: 5.29
+epoch:  9 | step:  15360 | loss1:  0.09957710668937234 | loss2:  1.0824666520780768 | loss3:  0.019126875326037407
+AUC1:  0.8703554402892719  AP1:  0.3331155381429224
+AUC2:  0.8529372367612009  AP2: 0.25031515882083916
+mAP@0.1 =8.93%
+mAP@0.2 =7.37%
+mAP@0.3 =5.27%
+mAP@0.4 =3.49%
+mAP@0.5 =2.54%
+average MAP: 5.52
+epoch:  10 | step:  1280 | loss1:  0.10314835675738075 | loss2:  1.1112315438010476 | loss3:  0.018927989527583122
+AUC1:  0.8717019096376636  AP1:  0.3329092721552545
+AUC2:  0.8546095915020779  AP2: 0.2528437464460655
+mAP@0.1 =9.80%
+mAP@0.2 =8.13%
+mAP@0.3 =5.04%
+mAP@0.4 =3.80%
+mAP@0.5 =2.06%
+average MAP: 5.77
+epoch:  10 | step:  2560 | loss1:  0.0984470397233963 | loss2:  1.1021229369299752 | loss3:  0.019153261557221413
+AUC1:  0.871543986653582  AP1:  0.332749720863168
+AUC2:  0.8544893458291392  AP2: 0.2525692501645699
+mAP@0.1 =9.80%
+mAP@0.2 =8.17%
+mAP@0.3 =5.05%
+mAP@0.4 =3.91%
+mAP@0.5 =2.09%
+average MAP: 5.81
+epoch:  10 | step:  3840 | loss1:  0.09851600109569487 | loss2:  1.088433402199899 | loss3:  0.019387422129511833
+AUC1:  0.8713110171841079  AP1:  0.33264142196821583
+AUC2:  0.8542322859857037  AP2: 0.252245700696651
+mAP@0.1 =9.48%
+mAP@0.2 =7.60%
+mAP@0.3 =5.43%
+mAP@0.4 =3.62%
+mAP@0.5 =2.52%
+average MAP: 5.73
+epoch:  10 | step:  5120 | loss1:  0.10033571592918257 | loss2:  1.0994130503840562 | loss3:  0.019540471956133842
+AUC1:  0.8711382968640611  AP1:  0.33263135292796886
+AUC2:  0.8540151528990645  AP2: 0.25185453300799376
+mAP@0.1 =9.32%
+mAP@0.2 =7.71%
+mAP@0.3 =5.35%
+mAP@0.4 =3.62%
+mAP@0.5 =2.51%
+average MAP: 5.70
+epoch:  10 | step:  6400 | loss1:  0.10313091076472226 | loss2:  1.098101400861553 | loss3:  0.019493311643600464
+AUC1:  0.8711268083159514  AP1:  0.332987059491905
+AUC2:  0.8538541774599531  AP2: 0.25165681481918056
+mAP@0.1 =9.22%
+mAP@0.2 =7.64%
+mAP@0.3 =5.30%
+mAP@0.4 =3.59%
+mAP@0.5 =2.49%
+average MAP: 5.65
+epoch:  10 | step:  7680 | loss1:  0.10029446150435777 | loss2:  1.0936041288688534 | loss3:  0.01941809616982937
+AUC1:  0.8711167920598166  AP1:  0.33313257535683233
+AUC2:  0.853677286402805  AP2: 0.25147438506254116
+mAP@0.1 =8.75%
+mAP@0.2 =7.15%
+mAP@0.3 =5.00%
+mAP@0.4 =3.33%
+mAP@0.5 =2.49%
+average MAP: 5.34
+epoch:  10 | step:  8960 | loss1:  0.10043663862095752 | loss2:  1.0917034132379881 | loss3:  0.01936476118862629
+AUC1:  0.8710519022297746  AP1:  0.33309860944792685
+AUC2:  0.8535166793378736  AP2: 0.2512845114895085
+mAP@0.1 =8.72%
+mAP@0.2 =7.12%
+mAP@0.3 =4.95%
+mAP@0.4 =3.31%
+mAP@0.5 =2.35%
+average MAP: 5.29
+epoch:  10 | step:  10240 | loss1:  0.09852305188039202 | loss2:  1.0890907770321694 | loss3:  0.019375205039978027
+AUC1:  0.8709800158851473  AP1:  0.3330477213968253
+AUC2:  0.8534005130267044  AP2: 0.25111610344630403
+mAP@0.1 =8.95%
+mAP@0.2 =7.40%
+mAP@0.3 =5.31%
+mAP@0.4 =3.54%
+mAP@0.5 =2.62%
+average MAP: 5.56
+epoch:  10 | step:  11520 | loss1:  0.09882829014907826 | loss2:  1.0884861186310486 | loss3:  0.01936267875134945
+AUC1:  0.8708621169642494  AP1:  0.33276742036826634
+AUC2:  0.8532944441529989  AP2: 0.2508907086170292
+mAP@0.1 =8.99%
+mAP@0.2 =7.42%
+mAP@0.3 =5.30%
+mAP@0.4 =3.54%
+mAP@0.5 =2.59%
+average MAP: 5.57
+epoch:  10 | step:  12800 | loss1:  0.09769349877196963 | loss2:  1.0849670036004322 | loss3:  0.019287068396806717
+AUC1:  0.8707069155008088  AP1:  0.33246022307088763
+AUC2:  0.8531738309399348  AP2: 0.25063800192215024
+mAP@0.1 =9.00%
+mAP@0.2 =7.42%
+mAP@0.3 =5.24%
+mAP@0.4 =3.55%
+mAP@0.5 =2.56%
+average MAP: 5.56
+epoch:  10 | step:  14080 | loss1:  0.09808616588513057 | loss2:  1.0832432486989476 | loss3:  0.019155604764819145
+AUC1:  0.8706350986607438  AP1:  0.33239010765068766
+AUC2:  0.8530774064266193  AP2: 0.2505176014273448
+mAP@0.1 =8.98%
+mAP@0.2 =7.42%
+mAP@0.3 =5.29%
+mAP@0.4 =3.50%
+mAP@0.5 =2.54%
+average MAP: 5.54
+epoch:  10 | step:  15360 | loss1:  0.09911003025356403 | loss2:  1.0828081812740358 | loss3:  0.019064635038375854
+AUC1:  0.870546068598801  AP1:  0.33249762998733545
+AUC2:  0.8529429744091541  AP2: 0.25041713397138704
+mAP@0.1 =8.98%
+mAP@0.2 =7.41%
+mAP@0.3 =5.30%
+mAP@0.4 =3.53%
+mAP@0.5 =2.57%
+average MAP: 5.56
