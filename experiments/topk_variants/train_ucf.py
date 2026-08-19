@@ -16,6 +16,10 @@ from test_ucf import test
 from dataset_variants import UCFDataset
 from utils.tools import get_prompt_text, get_batch_label
 from adaptive_instance_selection import select_adaptive_instance_k
+from temporal_smoothness import (
+    a_branch_temporal_smoothness,
+    c_branch_temporal_smoothness,
+)
 from topk_pooling import temporal_segment_pool, topk_pool, video_topk_size
 from training_log import TrainingLogger
 import options as ucf_option
@@ -119,6 +123,29 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         raise ValueError(
             "--temporal-smoothing-kernel must be a positive odd integer"
         )
+    smoothness_enabled = args.temporal_smoothness_branch != 'none'
+    if (smoothness_enabled and
+            args.temporal_smoothness_start_epoch < 1):
+        raise ValueError(
+            "--temporal-smoothness-start-epoch must be at least 1"
+        )
+    if (args.temporal_smoothness_branch in ('c', 'both') and
+            args.c_temporal_smoothness_weight <= 0):
+        raise ValueError(
+            "--c-temporal-smoothness-weight must be positive for C smoothness"
+        )
+    if (args.temporal_smoothness_branch in ('a', 'both') and
+            args.a_temporal_smoothness_weight <= 0):
+        raise ValueError(
+            "--a-temporal-smoothness-weight must be positive for A smoothness"
+        )
+    if (smoothness_enabled and args.temporal_segment_topk and
+            args.temporal_smoothing_kernel != 1):
+        raise ValueError(
+            "Do not combine fixed Conv1D score smoothing with temporal "
+            "smoothness loss in the isolated experiment. Use "
+            "--temporal-smoothing-kernel 1."
+        )
 
     gt = np.load(args.gt_path)
     gtsegments = np.load(args.gt_segment_path, allow_pickle=True)
@@ -147,7 +174,14 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"temporal_segment_topk={args.temporal_segment_topk} "
         f"temporal_segment_start_epoch="
         f"{args.temporal_segment_start_epoch} "
-        f"temporal_smoothing_kernel={args.temporal_smoothing_kernel}"
+        f"temporal_smoothing_kernel={args.temporal_smoothing_kernel} "
+        f"temporal_smoothness_branch={args.temporal_smoothness_branch} "
+        f"temporal_smoothness_start_epoch="
+        f"{args.temporal_smoothness_start_epoch} "
+        f"c_temporal_smoothness_weight="
+        f"{args.c_temporal_smoothness_weight} "
+        f"a_temporal_smoothness_weight="
+        f"{args.a_temporal_smoothness_weight}"
     )
     prompt_text = get_prompt_text(label_map)
     ap_best = 0
@@ -194,6 +228,10 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             args.temporal_segment_topk and
             e + 1 >= args.temporal_segment_start_epoch
         )
+        temporal_smoothness_active = (
+            smoothness_enabled and
+            e + 1 >= args.temporal_smoothness_start_epoch
+        )
         if args.temporal_segment_topk:
             logger.log(
                 f"epoch={e + 1} temporal_segment_active="
@@ -202,9 +240,20 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 f"a_branch_pooling="
                 f"{'temporal_segment' if temporal_segment_active else 'original_hard_topk'}"
             )
+        if smoothness_enabled:
+            logger.log(
+                f"epoch={e + 1} temporal_smoothness_active="
+                f"{temporal_smoothness_active} "
+                f"temporal_smoothness_branch="
+                f"{args.temporal_smoothness_branch}"
+            )
         loss_total1 = 0
         loss_total2 = 0
         loss_total3 = 0
+        loss_total_smooth_c = 0
+        loss_total_smooth_a = 0
+        loss_total_weighted_smooth_c = 0
+        loss_total_weighted_smooth_a = 0
         ais_pair_count = 0
         ais_k_total = 0.0
         ais_confidence_total = 0.0
@@ -271,11 +320,39 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                             text_feature_normal @ text_feature_abr
                         )
                     loss3 = loss3 / (text_features.shape[0] - 1) * 1e-1
-                loss = loss1 + loss2 + loss3
+                loss_smooth_c = torch.zeros(
+                    (), device=device, dtype=torch.float32
+                )
+                loss_smooth_a = torch.zeros(
+                    (), device=device, dtype=torch.float32
+                )
+                if temporal_smoothness_active:
+                    if args.temporal_smoothness_branch in ('c', 'both'):
+                        loss_smooth_c = c_branch_temporal_smoothness(
+                            logits1, feat_lengths
+                        )
+                    if args.temporal_smoothness_branch in ('a', 'both'):
+                        loss_smooth_a = a_branch_temporal_smoothness(
+                            logits2, feat_lengths
+                        )
+                weighted_smooth_c = (
+                    args.c_temporal_smoothness_weight * loss_smooth_c
+                )
+                weighted_smooth_a = (
+                    args.a_temporal_smoothness_weight * loss_smooth_a
+                )
+                loss = (
+                    loss1 + loss2 + loss3
+                    + weighted_smooth_c + weighted_smooth_a
+                )
 
             loss_total1 += loss1.item()
             loss_total2 += loss2.item()
             loss_total3 += loss3.item()
+            loss_total_smooth_c += loss_smooth_c.item()
+            loss_total_smooth_a += loss_smooth_a.item()
+            loss_total_weighted_smooth_c += weighted_smooth_c.item()
+            loss_total_weighted_smooth_a += weighted_smooth_a.item()
             if ais_selection is not None:
                 ais_pair_count += ais_selection.pair_k.numel()
                 ais_k_total += ais_selection.pair_k.float().sum().item()
@@ -310,6 +387,10 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     f"epoch={e + 1}/{args.max_epoch} batch={i + 1}/{num_batches} "
                     f"loss={loss.item():.4f} loss1={loss1.item():.4f} "
                     f"loss2={loss2.item():.4f} loss3={loss3.item():.4f} "
+                    f"loss_smooth_c={loss_smooth_c.item():.6f} "
+                    f"weighted_smooth_c={weighted_smooth_c.item():.6f} "
+                    f"loss_smooth_a={loss_smooth_a.item():.6f} "
+                    f"weighted_smooth_a={weighted_smooth_a.item():.6f} "
                     f"lr={optimizer.param_groups[0]['lr']:.2e} "
                     f"{ais_text}"
                     f"peak_vram={peak_vram:.2f}GB"
@@ -347,6 +428,14 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             f"avg_loss1={loss_total1 / num_batches:.4f} "
             f"avg_loss2={loss_total2 / num_batches:.4f} "
             f"avg_loss3={loss_total3 / num_batches:.4f} "
+            f"avg_loss_smooth_c="
+            f"{loss_total_smooth_c / num_batches:.6f} "
+            f"avg_weighted_smooth_c="
+            f"{loss_total_weighted_smooth_c / num_batches:.6f} "
+            f"avg_loss_smooth_a="
+            f"{loss_total_smooth_a / num_batches:.6f} "
+            f"avg_weighted_smooth_a="
+            f"{loss_total_weighted_smooth_a / num_batches:.6f} "
             f"{ais_epoch_text}"
             f"peak_vram={peak_vram:.2f}GB"
         )

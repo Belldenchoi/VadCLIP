@@ -53,6 +53,17 @@ parser.add_argument('--temporal-segment-start-epoch', default=6, type=int,
 parser.add_argument('--temporal-smoothing-kernel', default=1, type=int,
                     help=('Odd fixed Conv1D mean-kernel size applied before '
                           'segment selection; 1 disables smoothing'))
+parser.add_argument('--temporal-smoothness-branch',
+                    choices=['none', 'c', 'a', 'both'], default='none',
+                    help=('Apply L1 temporal smoothness regularization to '
+                          'C anomaly probabilities, A anomaly probabilities, '
+                          'both branches, or neither'))
+parser.add_argument('--temporal-smoothness-start-epoch', default=1, type=int,
+                    help='1-based epoch where temporal smoothness loss starts')
+parser.add_argument('--c-temporal-smoothness-weight', default=0.01, type=float,
+                    help='Weight for C-branch temporal smoothness loss')
+parser.add_argument('--a-temporal-smoothness-weight', default=0.05, type=float,
+                    help='Weight for A-branch temporal smoothness loss')
 parser.add_argument('--adaptive-instance-selection', action='store_true',
                     help='Use C-branch AIS K for paired C/A MIL pooling')
 parser.add_argument('--ais-score-threshold', default=0.9, type=float,
