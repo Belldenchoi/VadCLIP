@@ -293,51 +293,94 @@ training và test set phải giữ cố định để kết quả A0–A4 có th
 `descriptions/ucf_crime_descriptions.json` chứa 20 description cho mỗi class, tập trung
 vào chủ thể và hành động. Description không dùng mạo từ `a`, `an`, `the` và tránh tính từ.
 
-## 1. Build prototype
+## Quy trình chạy trên Kaggle
 
-```bash
-python experiments/class_prototypes/build_prototypes.py \
-  --output outputs/class_prototypes/ucf_crime.pt \
-  --audit-output outputs/class_prototypes/ucf_crime_selection.json \
-  --top-k 5 \
-  --diversity-threshold 0.90 \
-  --aggregation weighted_mean \
-  --weight-temperature 0.10
+Thứ tự bắt buộc:
+
+```text
+Cell 1: Build prototype
+        ↓
+Cell 2: Kiểm tra cache và audit
+        ↓
+Cell 3: Train VadCLIP bằng prototype cache
+        ↓
+Cell 4: Test checkpoint
 ```
 
-Script dùng frozen CLIP ViT-B/16, chấm score theo class-name, intra-class và
-hard-negative inter-class, sau đó diversity filtering và weighted mean.
+`train_ucf.py` không tự encode description. Nó yêu cầu file `.pt` đã được tạo bởi
+`build_prototypes.py`, vì vậy phải chạy build ít nhất một lần trước khi train.
 
-Trên Kaggle:
+### Cell 1 — Build prototype
+
+Ví dụ dưới đây build cấu hình A4: Diversity-filtered + Weighted Top-K.
 
 ```bash
 !cd /kaggle/working/VadCLIP && \
-mkdir -p outputs/class_prototypes && \
+mkdir -p outputs/class_prototypes outputs && \
 python experiments/class_prototypes/build_prototypes.py \
-  --output outputs/class_prototypes/ucf_crime.pt \
-  --audit-output outputs/class_prototypes/ucf_crime_selection.json \
   --top-k 5 \
   --diversity-threshold 0.90 \
   --aggregation weighted_mean \
-  --weight-temperature 0.10
+  --weight-temperature 0.10 \
+  --output outputs/class_prototypes/ucf_crime.pt \
+  --audit-output outputs/class_prototypes/ucf_crime_selection.json
 ```
 
-## 2. Train với MIL-Align Top-K gốc
+Script dùng frozen CLIP ViT-B/16, chấm score theo class-name, intra-class và
+hard-negative inter-class, sau đó diversity filtering, weighted mean và L2 normalize.
+
+Kết quả cần tạo:
+
+```text
+outputs/class_prototypes/ucf_crime.pt
+outputs/class_prototypes/ucf_crime_selection.json
+```
+
+### Cell 2 — Kiểm tra cache
 
 ```bash
-python experiments/class_prototypes/train_ucf.py \
-  --prototype-path outputs/class_prototypes/ucf_crime.pt \
-  --topk-pooling mean \
-  --model-path outputs/ucf_prototype.pth \
-  --checkpoint-path outputs/ucf_prototype_checkpoint.pth \
-  --log-path outputs/ucf_prototype.log
+!ls -lh /kaggle/working/VadCLIP/outputs/class_prototypes
 ```
 
-Không bật `--adaptive-instance-selection` hoặc `--temporal-segment-topk` trong thí
-nghiệm đầu tiên. `loss3` được tắt vì prototype cố định; loss C-branch và MIL-Align
-A-branch vẫn được giữ.
+Kiểm tra shape, class order, số description được chọn, score và weight:
 
-Trên Kaggle:
+```python
+import json
+import torch
+
+cache_path = "/kaggle/working/VadCLIP/outputs/class_prototypes/ucf_crime.pt"
+audit_path = "/kaggle/working/VadCLIP/outputs/class_prototypes/ucf_crime_selection.json"
+
+cache = torch.load(cache_path, map_location="cpu", weights_only=True)
+print("Prototype shape:", tuple(cache["prototypes"].shape))
+print("Class order:", cache["class_names"])
+print("Prototype norms:", cache["prototypes"].norm(dim=-1))
+
+with open(audit_path, encoding="utf-8") as file:
+    audit = json.load(file)
+
+for class_name, information in audit["classes"].items():
+    print(f"\n{class_name}: {information['selected_count']} selected")
+    for item in information["selected"]:
+        print(
+            f"  weight={item['weight']:.4f} "
+            f"score={item['score']:.4f} "
+            f"text={item['description']}"
+        )
+```
+
+Kết quả mong đợi:
+
+```text
+Prototype shape: (14, 512)
+14 class theo đúng thứ tự label map
+Mỗi prototype có norm xấp xỉ 1
+```
+
+Nếu file `.pt` không tồn tại, class order sai hoặc shape không phải `[14, 512]`, không
+chạy train trước khi sửa lỗi build.
+
+### Cell 3 — Train với MIL-Align Top-K gốc
 
 ```bash
 !cd /kaggle/working/VadCLIP && \
@@ -353,11 +396,45 @@ python experiments/class_prototypes/train_ucf.py \
   2>&1 | tee outputs/ucf_prototype_console.log
 ```
 
-## 3. Test
+Trong thí nghiệm Class Prototype đầu tiên:
+
+- Không bật `--adaptive-instance-selection`.
+- Không bật `--temporal-segment-topk`.
+- C-branch giữ nguyên.
+- A-branch giữ MIL-Align hard Top-K gốc.
+- `loss3` được tắt vì prototype cố định.
+
+### Cell 4 — Test checkpoint
 
 ```bash
+!cd /kaggle/working/VadCLIP && \
+set -o pipefail && \
 python experiments/class_prototypes/test_ucf.py \
+  --test-list /kaggle/working/ucf_CLIP_rgbtest_kaggle.csv \
   --prototype-path outputs/class_prototypes/ucf_crime.pt \
   --model-path outputs/ucf_prototype.pth \
-  --log-path outputs/ucf_prototype_test.log
+  --log-path outputs/ucf_prototype_test.log \
+  2>&1 | tee outputs/ucf_prototype_test_console.log
 ```
+
+### Khi nào phải build lại prototype?
+
+Không cần build lại khi chỉ:
+
+- Chạy lại training với seed khác.
+- Thay batch size, learning rate hoặc số epoch.
+- Resume cùng cấu hình prototype.
+
+Phải build lại khi thay bất kỳ thành phần nào sau đây:
+
+- Nội dung description.
+- CLIP checkpoint.
+- `--top-k`.
+- Bật hoặc tắt diversity filtering.
+- `--diversity-threshold`.
+- `--aggregation`.
+- `--weight-temperature`.
+- Trọng số semantic score `alpha`, `beta`, `gamma`.
+
+Với ablation A0–A4, mỗi cấu hình cần một prototype cache, model, checkpoint và log
+riêng. Không dùng chung tên output vì sẽ ghi đè artifact của cấu hình trước.
