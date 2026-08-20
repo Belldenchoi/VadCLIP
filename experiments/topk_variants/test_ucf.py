@@ -108,7 +108,13 @@ def test(model, testdataloader, maxlen, prompt_text, gt, gtsegments, gtlabels,
     averageMAP = averageMAP/(i+1)
     report('average_mAP={:.2f}%'.format(averageMAP))
 
-    return ROC1, AP1
+    return {
+        'auc1': ROC1,
+        'ap1': AP1,
+        'auc2': ROC2,
+        'ap2': AP2,
+        'average_map': averageMAP,
+    }
 
 
 if __name__ == '__main__':

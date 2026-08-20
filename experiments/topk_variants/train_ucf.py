@@ -166,6 +166,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"device={device} amp={use_amp} epochs={args.max_epoch} "
         f"batch_size={args.batch_size} accumulation={accumulation_steps} "
         f"actions={args.train_actions or 'all'} "
+        f"checkpoint_metric={args.checkpoint_metric} "
         f"topk_pooling={args.topk_pooling} "
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
@@ -191,6 +192,16 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         checkpoint = torch.load(
             args.checkpoint_path, map_location=device, weights_only=False
         )
+        saved_checkpoint_metric = checkpoint.get(
+            'checkpoint_metric', 'auc1'
+        )
+        if saved_checkpoint_metric != args.checkpoint_metric:
+            raise ValueError(
+                "Checkpoint was selected with metric "
+                f"{saved_checkpoint_metric!r}, but this run requested "
+                f"{args.checkpoint_metric!r}. Use a matching checkpoint or "
+                "start a new run."
+            )
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if 'scheduler_state_dict' in checkpoint:
@@ -398,22 +409,30 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             step += i * normal_loader.batch_size * 2
             if not args.skip_eval and step % 1280 == 0 and step != 0:
                 print('epoch: ', e+1, '| step: ', step, '| loss1: ', loss_total1 / (i+1), '| loss2: ', loss_total2 / (i+1), '| loss3: ', loss3.item())
-                AUC, AP = test(model, testloader, args.visual_length,
-                               prompt_text, gt, gtsegments, gtlabels, device,
-                               logger=logger,
-                               temporal_postprocess=temporal_segment_active,
-                               temporal_smoothing_kernel=
-                               args.temporal_smoothing_kernel)
-                AP = AUC
+                metrics = test(
+                    model, testloader, args.visual_length, prompt_text, gt,
+                    gtsegments, gtlabels, device, logger=logger,
+                    temporal_postprocess=temporal_segment_active,
+                    temporal_smoothing_kernel=args.temporal_smoothing_kernel,
+                )
+                checkpoint_score = metrics[args.checkpoint_metric]
 
-                if AP > ap_best:
-                    ap_best = AP 
+                if checkpoint_score > ap_best:
+                    ap_best = checkpoint_score
                     checkpoint = {
                         'epoch': e,
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
-                        'ap': ap_best}
+                        'ap': ap_best,
+                        'checkpoint_metric': args.checkpoint_metric,
+                    }
                     torch.save(checkpoint, args.checkpoint_path)
+                    logger.log(
+                        f"best_checkpoint_metric={args.checkpoint_metric} "
+                        f"best_checkpoint_score={ap_best:.6f} "
+                        f"best_checkpoint_epoch={e + 1} "
+                        f"best_checkpoint_batch={i + 1}"
+                    )
                 
         peak_vram = (torch.cuda.max_memory_allocated() / 1024 ** 3
                      if device == "cuda" else 0.0)
@@ -473,11 +492,6 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 f"{model_path.stem}_cur{model_path.suffix}"
             )
             torch.save(model.state_dict(), current_model_path)
-            if Path(args.checkpoint_path).exists():
-                checkpoint = torch.load(
-                    args.checkpoint_path, weights_only=False
-                )
-                model.load_state_dict(checkpoint['model_state_dict'])
 
     if args.skip_eval:
         torch.save(model.state_dict(), args.model_path)

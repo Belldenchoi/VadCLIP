@@ -13,7 +13,8 @@ Phiên bản thử nghiệm đầu tiên chỉ thay A-branch:
 - A-branch giữ nguyên hard Top-K trước epoch kích hoạt.
 - A-branch dùng class-aware temporal segment từ epoch kích hoạt.
 - K vẫn dùng đúng công thức gốc `floor(T_valid / 16) + 1`.
-- MIL loss, label, temporal encoder và evaluator giữ nguyên.
+- MIL loss, label và temporal encoder giữ nguyên. Evaluator vẫn frame-aligned;
+  fixed smoothing chỉ được áp khi temporal post-process active và kernel lớn hơn 1.
 - Conv1D smoothing là tùy chọn, dùng kernel cố định và không thêm tham số học.
 
 Mục tiêu của phạm vi này là đo riêng ảnh hưởng của tính liên tục thời gian, không trộn
@@ -256,7 +257,7 @@ Temporal Segment Top-K.
 
 ## 8. Training và inference
 
-Temporal Segment Top-K chỉ thay cách tạo video-level logits cho `CLASM/loss2` trong
+Temporal Segment Top-K thay cách tạo video-level logits cho `CLASM/loss2` trong
 training:
 
 ```text
@@ -267,8 +268,22 @@ video-level logits [B,C]
 loss2
 ```
 
-Khi test, evaluator vẫn sử dụng frame-level `logits2`, softmax và các metric AUC/AP/mAP
-như baseline. Không crop hoặc xóa frame ngoài selected training segment trong inference.
+Khi test, evaluator vẫn giữ toàn bộ frame-level `logits2`, softmax và các metric
+AUC/AP/mAP như baseline. Không crop hoặc xóa frame ngoài selected training segment.
+Nếu temporal segment đã active, evaluator áp cùng fixed temporal smoothing lên valid
+A-branch logits trước softmax:
+
+```text
+valid logits2 [T,C]
+        ↓ fixed mean smoothing nếu kernel > 1
+frame-level probabilities [T,C]
+        ↓ evaluator gốc
+AUC2/AP2 và detection mAP
+```
+
+Kernel `1` là exact identity nên kết quả số học khớp evaluator baseline. Kernel `3/5`
+cố ý tạo temporal-aware evaluation nhưng vẫn giữ nguyên T. C-branch `AUC1/AP1` không
+nhận post-process này.
 
 Điều này quan trọng: selected segment là cơ chế weak-label training, không phải output
 temporal localization cuối cùng.
@@ -303,6 +318,7 @@ baseline độc lập mới chạy cấu hình kết hợp.
 | `--temporal-segment-topk` | Tắt | Bật cơ chế segment cho A-branch |
 | `--temporal-segment-start-epoch` | `6` | Epoch đầu tiên dùng segment |
 | `--temporal-smoothing-kernel` | `1` | `1` không smoothing; `3/5` để smooth |
+| `--checkpoint-metric` | `auc1` | Metric chọn best checkpoint |
 | K | `floor(T_valid/16)+1` | Giữ K gốc của VadCLIP |
 | C-branch pooling | Hard Top-K | Luôn giữ nguyên trong thử nghiệm đầu |
 | A-branch pooling trước switch | Hard Top-K | Warm-up baseline |
@@ -347,6 +363,17 @@ Metric chính:
 - `AUC2`, `AP2`: A-branch chịu ảnh hưởng trực tiếp của temporal segment training.
 - Detection mAP theo IoU.
 - Average mAP.
+
+Checkpoint mặc định vẫn chọn theo `AUC1` để giữ policy cũ:
+
+```text
+--checkpoint-metric auc1
+```
+
+Các lựa chọn khác (`ap1`, `auc2`, `ap2`, `average_map`) chỉ dùng khi mục tiêu ablation
+yêu cầu. Không đổi checkpoint metric giữa các run trong cùng một bảng so sánh. Model
+tiếp tục train từ current weights qua các epoch; best checkpoint không được nạp ngược
+vào giữa training và chỉ được dùng để xuất model cuối.
 
 Log bổ sung cần có:
 
@@ -408,6 +435,7 @@ python experiments/topk_variants/train_ucf.py \
   --train-list /kaggle/working/ucf_CLIP_rgb_kaggle.csv \
   --test-list /kaggle/working/ucf_CLIP_rgbtest_kaggle.csv \
   --topk-pooling mean \
+  --checkpoint-metric auc1 \
   --model-path outputs/t0_baseline.pth \
   --checkpoint-path outputs/t0_baseline_checkpoint.pth \
   --log-path outputs/t0_baseline.log \
@@ -426,6 +454,7 @@ python experiments/topk_variants/train_ucf.py \
   --temporal-segment-topk \
   --temporal-segment-start-epoch 1 \
   --temporal-smoothing-kernel 1 \
+  --checkpoint-metric auc1 \
   --model-path outputs/t1_temporal_start1.pth \
   --checkpoint-path outputs/t1_temporal_start1_checkpoint.pth \
   --log-path outputs/t1_temporal_start1.log \
@@ -444,6 +473,7 @@ python experiments/topk_variants/train_ucf.py \
   --temporal-segment-topk \
   --temporal-segment-start-epoch 6 \
   --temporal-smoothing-kernel 1 \
+  --checkpoint-metric auc1 \
   --model-path outputs/t2_temporal_start6.pth \
   --checkpoint-path outputs/t2_temporal_start6_checkpoint.pth \
   --log-path outputs/t2_temporal_start6.log \
@@ -526,6 +556,7 @@ python experiments/topk_variants/train_ucf.py \
   --temporal-smoothness-branch c \
   --temporal-smoothness-start-epoch 1 \
   --c-temporal-smoothness-weight 0.01 \
+  --checkpoint-metric auc1 \
   --model-path outputs/smooth_c_only.pth \
   --checkpoint-path outputs/smooth_c_only_checkpoint.pth \
   --log-path outputs/smooth_c_only.log \
@@ -556,6 +587,7 @@ python experiments/topk_variants/train_ucf.py \
   --temporal-smoothness-branch a \
   --temporal-smoothness-start-epoch 1 \
   --a-temporal-smoothness-weight 0.05 \
+  --checkpoint-metric auc1 \
   --model-path outputs/smooth_a_only.pth \
   --checkpoint-path outputs/smooth_a_only_checkpoint.pth \
   --log-path outputs/smooth_a_only.log \
@@ -574,9 +606,34 @@ A-only vẫn có thể ảnh hưởng gián tiếp tới C-branch. Vì vậy c�
 | `--temporal-smoothness-start-epoch` | `1` | Epoch bắt đầu regularization |
 | `--c-temporal-smoothness-weight` | `0.01` | `lambda_C` |
 | `--a-temporal-smoothness-weight` | `0.05` | `lambda_A` |
+| `--checkpoint-metric` | `auc1` | Giữ policy chọn checkpoint theo AUC1 |
 
 `none` là mặc định nên baseline không thay đổi. Mode `both` đã được hỗ trợ nhưng chỉ nên
 chạy sau khi có kết quả C-only và A-only.
+
+Weight không phải tham số của moving-average kernel. Nó chỉ nhân auxiliary loss:
+
+```text
+weighted_smooth_A = lambda_A × L_smooth_A
+```
+
+Không khai báo phép nhân tương đương cố định `lambda_A=1.0`, không phải loại bỏ weight.
+Vì probability liền kề thường đã gần nhau và loss được mean theo thời gian rồi theo
+batch, raw smoothness có thể nhỏ. Ví dụ run `smooth_a_only` quan sát ở epoch 10:
+
+```text
+avg_loss_smooth_a          = 0.002391
+lambda_A                   = 0.05
+avg_weighted_smooth_a      = 0.000120
+loss1 + loss2 + loss3      ≈ 0.6938
+weighted smooth / main loss ≈ 0.017%
+```
+
+`0.000120` không phải zero; UI hiển thị ít chữ số có thể làm nó trông như `0.000`.
+Trong mode A-only, `weighted_smooth_c=0` là hành vi đúng. Không kết luận tác động chỉ từ
+tỷ lệ scalar loss vì gradient scale cũng quan trọng; cần đối chiếu AUC/AP/mAP qua cùng
+seed và checkpoint policy. Nếu ablate weight, giữ `0.05` làm mốc rồi thử riêng `0.5` và
+`1.0`, không đổi đồng thời start epoch.
 
 Cần phân biệt hai tham số độc lập:
 
@@ -586,6 +643,17 @@ Cần phân biệt hai tham số độc lập:
 | Temporal Smoothness Loss | `--temporal-smoothness-start-epoch` | `1` |
 
 Thay đổi epoch của Temporal Segment không tự thay đổi epoch của Smoothness và ngược lại.
+
+Hai trạng thái log cũng độc lập:
+
+```text
+temporal_smoothness_active=True
+temporal_eval_active=False
+```
+
+Trạng thái trên là đúng cho A-only/C-only: regularizer đang chạy trong training, còn
+fixed Conv1D post-process trong evaluator đang tắt. Smoothness Loss vẫn có thể thay đổi
+metric gián tiếp thông qua model weights đã học.
 
 Nếu kết hợp Temporal Segment Top-K với smoothness loss, bắt buộc dùng:
 

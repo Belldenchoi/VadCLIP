@@ -7,12 +7,13 @@ file nào trong `src/` cần chỉnh sửa để chạy các phương pháp ở 
 
 ```text
 experiments/topk_variants/
-├── train_ucf.py                   # train mean/soft/multi-K/AIS
-├── test_ucf.py                    # đánh giá và ghi log
+├── train_ucf.py                   # train các Top-K và temporal regularizer
+├── test_ucf.py                    # đánh giá, optional temporal post-process
 ├── options.py                     # CLI riêng của variants
 ├── dataset_variants.py            # lọc action/smoke-test riêng
-├── topk_pooling.py                # mean, Soft Top-K, Multi-K
+├── topk_pooling.py                # mean/soft/multi-K/temporal segment
 ├── adaptive_instance_selection.py # AIS tách khỏi Soft Top-K
+├── temporal_smoothness.py         # smoothness loss cho C/A probability
 ├── detection_map.py               # mAP có thể lọc action
 ├── training_log.py                # log ra terminal và file
 ├── inspect_topk_weights.py        # xem score/index/weight Top-K
@@ -22,7 +23,7 @@ experiments/topk_variants/
 Model, temporal adapter và CLIP vẫn được dùng trực tiếp từ `src/model.py` của
 baseline gốc. Folder này không ghi đè hay monkey-patch code trong `src/`.
 
-## Bốn cấu hình so sánh
+## Các cấu hình so sánh
 
 ### 1. Baseline gốc
 
@@ -89,6 +90,66 @@ python experiments/topk_variants/train_ucf.py \
 AIS cố ý không cho chạy đồng thời với `soft` hoặc `multi_k`, giúp mỗi thí
 nghiệm chỉ thay đổi một cơ chế pooling.
 
+### 5. Temporal Segment Top-K
+
+Hard Top-K gốc chọn K temporal position mạnh nhất và cho phép chúng nằm rời
+rạc. Temporal Segment Top-K giữ nguyên K nhưng buộc A-branch chọn một cửa sổ
+liên tục dài K. Mỗi class chọn cửa sổ riêng.
+
+```bash
+python experiments/topk_variants/train_ucf.py \
+  --topk-pooling mean \
+  --temporal-segment-topk \
+  --temporal-segment-start-epoch 6 \
+  --temporal-smoothing-kernel 1 \
+  --checkpoint-metric auc1 \
+  --model-path outputs/ucf_temporal_segment.pth \
+  --checkpoint-path outputs/ucf_temporal_segment_checkpoint.pth \
+  --log-path outputs/ucf_temporal_segment.log
+```
+
+`--temporal-smoothing-kernel 1` là identity. Kernel `3` hoặc `5` dùng fixed
+mean Conv1D trước khi chọn segment trong training và smooth A-branch logits
+trước khi tính metric trong evaluation. Post-process vẫn giữ nguyên số temporal
+position; nó không crop video về selected segment.
+
+### 6. Temporal Smoothness Loss
+
+Smoothness Loss khác với fixed Conv1D phía trên. Nó không thay score bằng moving
+average mà thêm một regularizer lên chênh lệch xác suất liền kề:
+
+```text
+p_A[t] = 1 - softmax(logits2[t])[Normal]
+L_smooth_A = mean |p_A[t+1] - p_A[t]|
+
+L_total = loss1 + loss2 + loss3 + lambda_A * L_smooth_A
+```
+
+Mục đích là giảm spike rời rạc và khuyến khích anomaly score tạo thành vùng
+liên tục. Weight vẫn cần để cân bằng regularizer với các loss chính; bỏ phép
+nhân tương đương cố định weight bằng `1.0`.
+
+```bash
+python experiments/topk_variants/train_ucf.py \
+  --topk-pooling mean \
+  --temporal-smoothness-branch a \
+  --temporal-smoothness-start-epoch 1 \
+  --a-temporal-smoothness-weight 0.05 \
+  --checkpoint-metric auc1 \
+  --model-path outputs/smooth_a_only.pth \
+  --checkpoint-path outputs/smooth_a_only_checkpoint.pth \
+  --log-path outputs/smooth_a_only.log
+```
+
+Trong cấu hình A-only, `loss_smooth_c=0` là đúng. `weighted_smooth_a` được tính
+bằng `a_temporal_smoothness_weight * loss_smooth_a`; giá trị có thể rất nhỏ và
+bị giao diện làm tròn nhưng không đồng nghĩa regularizer bị tắt.
+
+Smoothness Loss chỉ tác động trong training. Vì vậy log A-only có thể đồng thời
+ghi `temporal_smoothness_active=True` và `temporal_eval_active=False`. Dòng thứ
+hai chỉ nói fixed Conv1D post-process không chạy trong evaluator; evaluator vẫn
+nhận model đã được smoothness regularization cập nhật.
+
 ## Cấu hình mặc định để so sánh công bằng
 
 ```text
@@ -133,6 +194,18 @@ python experiments/topk_variants/test_ucf.py \
   --model-path outputs/ucf_ais.pth \
   --log-path outputs/ucf_ais_test.log
 ```
+
+Evaluator luôn log `AUC1/AP1`, `AUC2/AP2` và detection mAP. Checkpoint tốt nhất
+mặc định vẫn được chọn theo `AUC1`, khớp policy trước đây:
+
+```text
+--checkpoint-metric auc1
+```
+
+Có thể chọn `ap1`, `auc2`, `ap2` hoặc `average_map` cho ablation riêng, nhưng
+phải giữ cùng policy giữa các run cần so sánh. Training tiếp tục từ model hiện
+tại qua các epoch; best checkpoint chỉ được nạp để xuất `model-path` sau khi
+training kết thúc.
 
 ## Kiểm tra unit tests
 

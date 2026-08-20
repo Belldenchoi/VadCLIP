@@ -33,6 +33,12 @@ parser.add_argument('--log-interval', default=10, type=int,
                     help='Print training metrics every N batches')
 parser.add_argument('--log-path', default=None,
                     help='Also write training metrics to this file')
+parser.add_argument('--checkpoint-metric',
+                    choices=['auc1', 'ap1', 'auc2', 'ap2', 'average_map'],
+                    default='auc1',
+                    help=('Evaluation metric used to select the best '
+                          'checkpoint; use ap2 or average_map for A-branch '
+                          'temporal experiments'))
 parser.add_argument('--topk-pooling',
                     choices=['mean', 'soft', 'multi_k'],
                     default='mean',
