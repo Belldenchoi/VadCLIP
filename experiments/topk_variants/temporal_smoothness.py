@@ -1,15 +1,25 @@
-"""Temporal smoothness regularizers for VadCLIP C/A anomaly scores."""
+"""Temporal total-variation regularizers for VadCLIP anomaly probabilities.
+
+For sample ``b`` with valid length ``T_b > 1``::
+
+    TV_b = sum_t |p[b, t + 1] - p[b, t]| / (T_b - 1)
+
+The batch loss is the mean of ``TV_b`` over samples that have at least one
+valid adjacent pair. Weighting by ``lambda_C`` or ``lambda_A`` is performed in
+``train_ucf.py`` when this raw regularizer is added to the total loss.
+"""
 
 import torch
 from torch import Tensor
 
 
 def temporal_total_variation(probabilities: Tensor, lengths: Tensor) -> Tensor:
-    """Return mean L1 difference between adjacent valid temporal scores.
+    """Return per-video-normalized L1 variation over valid temporal pairs.
 
     ``probabilities`` must have shape ``[B, T]``. Each sample is averaged over
     its own valid adjacent pairs before averaging across the batch so long
-    videos do not dominate short videos. Padding never contributes.
+    videos do not dominate short videos. Samples of length one have no valid
+    pair and are excluded. Padding never contributes.
     """
     if probabilities.ndim != 2:
         raise ValueError(

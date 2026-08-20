@@ -113,6 +113,24 @@ mean Conv1D trước khi chọn segment trong training và smooth A-branch logit
 trước khi tính metric trong evaluation. Post-process vẫn giữ nguyên số temporal
 position; nó không crop video về selected segment.
 
+Biến thể Weighted Temporal Segment vẫn chọn cửa sổ liên tục bằng mean, nhưng
+thay mean đều bên trong cửa sổ đã chọn bằng score-derived softmax weights:
+
+```text
+segment = argmax cửa sổ mean dài K
+w[t] = softmax(segment_score[t] / temperature)
+pooled = sum w[t] * segment_score[t]
+```
+
+```bash
+--temporal-segment-weighted \
+--temporal-segment-temperature 1.0
+```
+
+Temperature thấp tập trung trọng số vào timestep mạnh; temperature cao tiến
+gần arithmetic mean. Đây là trọng số pooling bên trong selected segment, không
+phải `temporal_smoothness_weight` và không được cộng như một auxiliary loss.
+
 ### 6. Temporal Smoothness Loss
 
 Smoothness Loss khác với fixed Conv1D phía trên. Nó không thay score bằng moving

@@ -59,6 +59,12 @@ parser.add_argument('--temporal-segment-start-epoch', default=6, type=int,
 parser.add_argument('--temporal-smoothing-kernel', default=1, type=int,
                     help=('Odd fixed Conv1D mean-kernel size applied before '
                           'segment selection; 1 disables smoothing'))
+parser.add_argument('--temporal-segment-weighted', action='store_true',
+                    help=('Use score-derived softmax weights inside the '
+                          'selected A-branch temporal segment'))
+parser.add_argument('--temporal-segment-temperature', default=1.0, type=float,
+                    help=('Softmax temperature for weighted temporal segment '
+                          'pooling; lower values focus on stronger positions'))
 parser.add_argument('--temporal-smoothness-branch',
                     choices=['none', 'c', 'a', 'both'], default='none',
                     help=('Apply L1 temporal smoothness regularization to '
