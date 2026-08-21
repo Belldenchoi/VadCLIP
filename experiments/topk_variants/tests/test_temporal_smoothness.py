@@ -13,6 +13,7 @@ from temporal_smoothness import (
     c_branch_temporal_smoothness,
     temporal_total_variation,
 )
+from topk_pooling import temporal_segment_pool
 
 
 class TemporalTotalVariationTests(unittest.TestCase):
@@ -74,6 +75,23 @@ class BranchSmoothnessTests(unittest.TestCase):
             logits2, torch.tensor([5, 3])
         )
         loss.backward()
+        self.assertIsNotNone(logits2.grad)
+        self.assertTrue(torch.isfinite(logits2.grad).all())
+
+    def test_a_smoothness_combines_with_kernel_three_segment_pooling(self):
+        logits2 = torch.randn(2, 6, 4, requires_grad=True)
+        lengths = torch.tensor([6, 5])
+        pooled = torch.stack([
+            temporal_segment_pool(
+                logits2[index, :length], k=3, smoothing_kernel=3
+            )
+            for index, length in enumerate(lengths.tolist())
+        ])
+        classification_proxy = pooled.square().mean()
+        smoothness = a_branch_temporal_smoothness(logits2, lengths)
+
+        (classification_proxy + 0.05 * smoothness).backward()
+
         self.assertIsNotNone(logits2.grad)
         self.assertTrue(torch.isfinite(logits2.grad).all())
 

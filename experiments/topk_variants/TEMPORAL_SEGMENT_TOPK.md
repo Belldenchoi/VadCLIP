@@ -234,8 +234,8 @@ temporal_smoothness_active=True
 temporal_eval_active=False
 ```
 
-Dòng thứ hai chỉ nói fixed post-process trong evaluator đang tắt; Smoothness Loss vẫn
-đang cập nhật model trong training.
+Dòng thứ hai xác nhận evaluator luôn dùng raw logits của VadCLIP gốc;
+Smoothness Loss vẫn đang cập nhật model trong training.
 
 ## 7. Training và evaluation
 
@@ -251,12 +251,13 @@ video logits [B,C]
 L2
 ```
 
-Evaluation cần giữ frame-level score để tính AUC/AP/mAP. Vì vậy:
+Evaluation giữ nguyên hoàn toàn evaluator VadCLIP gốc để tính AUC/AP/mAP:
 
-- Segment selection và segment weights không được dùng để xóa frame lúc test.
-- Kernel `1` giữ evaluator giống baseline về mặt số học.
-- Kernel `3/5` smooth valid A-branch logits trước softmax.
-- C-branch evaluation không nhận A-branch temporal post-process.
+- Segment selection và segment weights không chạy lúc test.
+- Fixed Conv1D không chạy lúc test, kể cả khi training dùng kernel `3/5`.
+- A-branch dùng trực tiếp `1 - softmax(raw_logits2)[Normal]`.
+- C-branch dùng trực tiếp `sigmoid(raw_logits1)`.
+- Log luôn ghi `temporal_eval_active=False evaluation_mode=original`.
 
 Weighted Temporal Segment tác động trực tiếp trong training và gián tiếp tới metric
 qua model weights đã học.
@@ -311,6 +312,7 @@ xuất `model-path` sau khi training hoàn tất.
 | T1 | Temporal Segment mean | 1 | Không | Tắt |
 | T1W | Weighted Temporal Segment | 1 | Có, `tau=1` | Tắt |
 | S-A | Hard Top-K gốc | — | Không | A-only |
+| T1-K3-S-A | Segment mean + Conv1D `3` | 1 | Không | A-only |
 
 So sánh quan trọng:
 
@@ -318,9 +320,12 @@ So sánh quan trọng:
 T0 → T1   ảnh hưởng của contiguous selection
 T1 → T1W ảnh hưởng riêng của weight trong selected segment
 T0 → S-A ảnh hưởng riêng của Temporal Smoothness Loss
+T1 → T1-K3-S-A ảnh hưởng kết hợp của Conv1D `3` và Smoothness A
 ```
 
-Chưa kết hợp T1W với Smoothness Loss cho đến khi các ablation độc lập hoàn tất.
+Trong T1-K3-S-A, Conv1D chỉ nằm trên đường tính classification loss `L2` của
+A-branch; Smoothness Loss được tính trên raw A-branch anomaly probability.
+C-branch và evaluation luôn giữ nguyên bản gốc.
 
 ## 11. Lệnh chạy T1W
 

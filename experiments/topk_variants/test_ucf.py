@@ -14,18 +14,13 @@ from model import CLIPVAD
 from dataset_variants import UCFDataset
 from utils.tools import get_batch_mask, get_prompt_text
 from detection_map import getDetectionMAP as dmAP
-from topk_pooling import smooth_temporal_scores
 from training_log import TrainingLogger
 import options as ucf_option
 
 def test(model, testdataloader, maxlen, prompt_text, gt, gtsegments, gtlabels,
-         device, logger=None, detection_class_indices=None,
-         temporal_postprocess=False, temporal_smoothing_kernel=1):
+         device, logger=None, detection_class_indices=None):
     report = logger.log if logger else lambda message: print(message, flush=True)
-    report(
-        f"temporal_eval_active={temporal_postprocess} "
-        f"temporal_smoothing_kernel={temporal_smoothing_kernel}"
-    )
+    report("temporal_eval_active=False evaluation_mode=original")
     
     model.to(device)
     model.eval()
@@ -62,13 +57,6 @@ def test(model, testdataloader, maxlen, prompt_text, gt, gtsegments, gtlabels,
             logits1 = logits1.reshape(logits1.shape[0] * logits1.shape[1], logits1.shape[2])
             logits2 = logits2.reshape(logits2.shape[0] * logits2.shape[1], logits2.shape[2])
             valid_logits2 = logits2[0:len_cur]
-            if temporal_postprocess:
-                # Keep the evaluator frame-aligned while applying the same
-                # fixed temporal smoothing used before segment selection in
-                # the A-branch training loss. Padded positions are excluded.
-                valid_logits2 = smooth_temporal_scores(
-                    valid_logits2, temporal_smoothing_kernel
-                )
             prob2 = (1 - valid_logits2.softmax(dim=-1)[:, 0].squeeze(-1))
             prob1 = torch.sigmoid(logits1[0:len_cur].squeeze(-1))
 
@@ -165,8 +153,7 @@ if __name__ == '__main__':
     logger.log(
         f"evaluation_model={args.model_path} clips={len(testdataset)} "
         f"actions={args.eval_actions or 'all'} "
-        f"temporal_eval_active={args.temporal_segment_topk} "
-        f"temporal_smoothing_kernel={args.temporal_smoothing_kernel}"
+        "temporal_eval_active=False evaluation_mode=original"
     )
 
     model_param = torch.load(args.model_path, weights_only=True)
@@ -174,6 +161,4 @@ if __name__ == '__main__':
 
     test(model, testdataloader, args.visual_length, prompt_text, gt, gtsegments,
          gtlabels, device, logger=logger,
-         detection_class_indices=detection_class_indices,
-         temporal_postprocess=args.temporal_segment_topk,
-         temporal_smoothing_kernel=args.temporal_smoothing_kernel)
+         detection_class_indices=detection_class_indices)

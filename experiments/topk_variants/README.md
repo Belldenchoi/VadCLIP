@@ -108,10 +108,10 @@ python experiments/topk_variants/train_ucf.py \
   --log-path outputs/ucf_temporal_segment.log
 ```
 
-`--temporal-smoothing-kernel 1` là identity. Kernel `3` hoặc `5` dùng fixed
-mean Conv1D trước khi chọn segment trong training và smooth A-branch logits
-trước khi tính metric trong evaluation. Post-process vẫn giữ nguyên số temporal
-position; nó không crop video về selected segment.
+`--temporal-smoothing-kernel 1` là identity. Kernel `3` hoặc `5` chỉ dùng fixed
+mean Conv1D trước khi chọn segment trong training. Evaluation luôn dùng raw
+C/A logits theo evaluator VadCLIP gốc: không smoothing, không crop và không
+chọn segment khi test.
 
 Biến thể Weighted Temporal Segment vẫn chọn cửa sổ liên tục bằng mean, nhưng
 thay mean đều bên trong cửa sổ đã chọn bằng score-derived softmax weights:
@@ -167,6 +167,18 @@ Smoothness Loss chỉ tác động trong training. Vì vậy log A-only có th�
 ghi `temporal_smoothness_active=True` và `temporal_eval_active=False`. Dòng thứ
 hai chỉ nói fixed Conv1D post-process không chạy trong evaluator; evaluator vẫn
 nhận model đã được smoothness regularization cập nhật.
+
+Có thể kết hợp Conv1D kernel `3`, Temporal Segment và Smoothness Loss A. Khi đó
+đường tính classification loss `L2` của A-branch dùng logits A đã qua Conv1D
+để chọn segment, còn Smoothness Loss vẫn được tính trên anomaly probability
+tạo từ raw logits A:
+
+```text
+raw logits2 ── Conv1D kernel 3 ── segment mean ── L2
+     └──────── 1 - P(Normal) ── adjacent L1 ── 0.05 * L_smooth_A
+```
+
+Evaluator vẫn dùng raw C/A logits của VadCLIP gốc.
 
 ## Cấu hình mặc định để so sánh công bằng
 
