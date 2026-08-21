@@ -33,12 +33,6 @@ parser.add_argument('--log-interval', default=10, type=int,
                     help='Print training metrics every N batches')
 parser.add_argument('--log-path', default=None,
                     help='Also write training metrics to this file')
-parser.add_argument('--checkpoint-metric',
-                    choices=['auc1', 'ap1', 'auc2', 'ap2', 'average_map'],
-                    default='auc1',
-                    help=('Evaluation metric used to select the best '
-                          'checkpoint; use ap2 or average_map for A-branch '
-                          'temporal experiments'))
 parser.add_argument('--topk-pooling',
                     choices=['mean', 'soft', 'multi_k'],
                     default='mean',
@@ -59,12 +53,6 @@ parser.add_argument('--temporal-segment-start-epoch', default=6, type=int,
 parser.add_argument('--temporal-smoothing-kernel', default=1, type=int,
                     help=('Odd fixed Conv1D mean-kernel size applied before '
                           'segment selection; 1 disables smoothing'))
-parser.add_argument('--temporal-segment-weighted', action='store_true',
-                    help=('Use score-derived softmax weights inside the '
-                          'selected A-branch temporal segment'))
-parser.add_argument('--temporal-segment-temperature', default=1.0, type=float,
-                    help=('Softmax temperature for weighted temporal segment '
-                          'pooling; lower values focus on stronger positions'))
 parser.add_argument('--temporal-smoothness-branch',
                     choices=['none', 'c', 'a', 'both'], default='none',
                     help=('Apply L1 temporal smoothness regularization to '

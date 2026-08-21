@@ -48,17 +48,13 @@ def smooth_temporal_scores(scores: Tensor, kernel_size: int = 1) -> Tensor:
 
 def temporal_segment_pool(scores: Tensor, k: int,
                           smoothing_kernel: int = 1,
-                          weighted: bool = False,
-                          temperature: float = 1.0,
                           return_start_indices: bool = False):
     """Pool the highest-scoring contiguous temporal segment.
 
     For ``[T, C]`` A-branch scores, every class selects its own segment.
-    Selection is based on the mean of optionally smoothed scores. By default,
-    the returned value is that mean. With ``weighted=True``, positions inside
-    the selected segment receive score-derived softmax weights. This preserves
-    hard contiguous selection while allowing stronger positions in the segment
-    to contribute more to the pooled class logit.
+    Selection is based on optionally smoothed scores and the returned value is
+    the mean over that selected smoothed segment. This mirrors hard Top-K's
+    discrete selection while enforcing temporal continuity.
     """
     if scores.ndim not in (1, 2):
         raise ValueError(
@@ -66,10 +62,6 @@ def temporal_segment_pool(scores: Tensor, k: int,
         )
     if scores.shape[0] == 0:
         raise ValueError("cannot pool an empty sequence")
-    if weighted and temperature <= 0:
-        raise ValueError(
-            f"temperature must be positive, got {temperature}"
-        )
 
     k = max(1, min(int(k), scores.shape[0]))
     smoothed = smooth_temporal_scores(scores, smoothing_kernel)
@@ -83,16 +75,6 @@ def temporal_segment_pool(scores: Tensor, k: int,
     )
     window_means = F.conv1d(channel_scores, mean_kernel).squeeze(1)
     pooled, start_indices = window_means.max(dim=-1)
-    if weighted:
-        offsets = torch.arange(k, device=scores.device).unsqueeze(1)
-        gather_indices = offsets + start_indices.unsqueeze(0)
-        selected_scores = (
-            smoothed.unsqueeze(1) if squeeze_channel else smoothed
-        ).gather(0, gather_indices)
-        segment_weights = torch.softmax(
-            selected_scores / temperature, dim=0
-        )
-        pooled = torch.sum(segment_weights * selected_scores, dim=0)
     if squeeze_channel:
         pooled = pooled.squeeze(0)
         start_indices = start_indices.squeeze(0)

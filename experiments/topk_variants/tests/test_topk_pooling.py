@@ -63,51 +63,6 @@ class TemporalSegmentPoolingTests(unittest.TestCase):
         self.assertTrue(torch.equal(starts, torch.tensor([0, 3])))
         self.assertTrue(torch.allclose(pooled, torch.tensor([5.0, 7.0])))
 
-    def test_weighted_segment_uses_score_derived_weights(self):
-        scores = torch.tensor([0.0, 1.0, 2.0, 0.0])
-
-        pooled, start = temporal_segment_pool(
-            scores, k=2, weighted=True, temperature=1.0,
-            return_start_indices=True,
-        )
-
-        selected = torch.tensor([1.0, 2.0])
-        expected = torch.sum(torch.softmax(selected, dim=0) * selected)
-        self.assertEqual(start.item(), 1)
-        self.assertTrue(torch.allclose(pooled, expected))
-        self.assertGreater(pooled.item(), selected.mean().item())
-
-    def test_weighted_segment_is_class_specific(self):
-        scores = torch.tensor([
-            [3.0, 0.0],
-            [1.0, 0.0],
-            [0.0, 2.0],
-            [0.0, 4.0],
-        ])
-
-        pooled, starts = temporal_segment_pool(
-            scores, k=2, weighted=True, return_start_indices=True
-        )
-
-        expected_c0 = torch.sum(
-            torch.softmax(torch.tensor([3.0, 1.0]), dim=0)
-            * torch.tensor([3.0, 1.0])
-        )
-        expected_c1 = torch.sum(
-            torch.softmax(torch.tensor([2.0, 4.0]), dim=0)
-            * torch.tensor([2.0, 4.0])
-        )
-        self.assertTrue(torch.equal(starts, torch.tensor([0, 2])))
-        self.assertTrue(torch.allclose(
-            pooled, torch.stack([expected_c0, expected_c1])
-        ))
-
-    def test_weighted_segment_requires_positive_temperature(self):
-        with self.assertRaises(ValueError):
-            temporal_segment_pool(
-                torch.ones(4), k=2, weighted=True, temperature=0.0
-            )
-
     def test_smoothing_uses_replicate_padding_and_preserves_shape(self):
         scores = torch.tensor([3.0, 0.0, 0.0])
 

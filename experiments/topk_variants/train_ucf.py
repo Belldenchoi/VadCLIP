@@ -35,9 +35,7 @@ def CLASM(logits, labels, lengths, device, temperature=1.0,
           pooling='soft',
           multi_k_percentages=(1.0, 5.0, 10.0, 20.0),
           instance_k=None, temporal_segment=False,
-          temporal_smoothing_kernel=1,
-          temporal_segment_weighted=False,
-          temporal_segment_temperature=1.0):
+          temporal_smoothing_kernel=1):
     labels = labels / torch.sum(labels, dim=1, keepdim=True)
     labels = labels.to(device)
 
@@ -52,9 +50,7 @@ def CLASM(logits, labels, lengths, device, temperature=1.0,
             if temporal_segment:
                 pooled = temporal_segment_pool(
                     logits[i, :length], pool_k,
-                    temporal_smoothing_kernel,
-                    weighted=temporal_segment_weighted,
-                    temperature=temporal_segment_temperature,
+                    temporal_smoothing_kernel
                 )
             else:
                 pooled = topk_pool(
@@ -127,16 +123,6 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         raise ValueError(
             "--temporal-smoothing-kernel must be a positive odd integer"
         )
-    if (args.temporal_segment_weighted and
-            not args.temporal_segment_topk):
-        raise ValueError(
-            "--temporal-segment-weighted requires --temporal-segment-topk"
-        )
-    if (args.temporal_segment_weighted and
-            args.temporal_segment_temperature <= 0):
-        raise ValueError(
-            "--temporal-segment-temperature must be positive"
-        )
     smoothness_enabled = args.temporal_smoothness_branch != 'none'
     if (smoothness_enabled and
             args.temporal_smoothness_start_epoch < 1):
@@ -180,7 +166,6 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"device={device} amp={use_amp} epochs={args.max_epoch} "
         f"batch_size={args.batch_size} accumulation={accumulation_steps} "
         f"actions={args.train_actions or 'all'} "
-        f"checkpoint_metric={args.checkpoint_metric} "
         f"topk_pooling={args.topk_pooling} "
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
@@ -190,9 +175,6 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"temporal_segment_start_epoch="
         f"{args.temporal_segment_start_epoch} "
         f"temporal_smoothing_kernel={args.temporal_smoothing_kernel} "
-        f"temporal_segment_weighted={args.temporal_segment_weighted} "
-        f"temporal_segment_temperature="
-        f"{args.temporal_segment_temperature} "
         f"temporal_smoothness_branch={args.temporal_smoothness_branch} "
         f"temporal_smoothness_start_epoch="
         f"{args.temporal_smoothness_start_epoch} "
@@ -209,16 +191,6 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         checkpoint = torch.load(
             args.checkpoint_path, map_location=device, weights_only=False
         )
-        saved_checkpoint_metric = checkpoint.get(
-            'checkpoint_metric', 'auc1'
-        )
-        if saved_checkpoint_metric != args.checkpoint_metric:
-            raise ValueError(
-                "Checkpoint was selected with metric "
-                f"{saved_checkpoint_metric!r}, but this run requested "
-                f"{args.checkpoint_metric!r}. Use a matching checkpoint or "
-                "start a new run."
-            )
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if 'scheduler_state_dict' in checkpoint:
@@ -261,19 +233,12 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             e + 1 >= args.temporal_smoothness_start_epoch
         )
         if args.temporal_segment_topk:
-            if temporal_segment_active:
-                a_branch_pooling = (
-                    'weighted_temporal_segment'
-                    if args.temporal_segment_weighted
-                    else 'temporal_segment'
-                )
-            else:
-                a_branch_pooling = 'original_hard_topk'
             logger.log(
                 f"epoch={e + 1} temporal_segment_active="
                 f"{temporal_segment_active} "
                 "c_branch_pooling=original_hard_topk "
-                f"a_branch_pooling={a_branch_pooling}"
+                f"a_branch_pooling="
+                f"{'temporal_segment' if temporal_segment_active else 'original_hard_topk'}"
             )
         if smoothness_enabled:
             logger.log(
@@ -337,9 +302,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               None if ais_selection is None
                               else ais_selection.batch_k,
                               temporal_segment_active,
-                              args.temporal_smoothing_kernel,
-                              args.temporal_segment_weighted,
-                              args.temporal_segment_temperature)
+                              args.temporal_smoothing_kernel)
                 loss3 = torch.zeros(1, device=device)
                 if not getattr(model, 'uses_fixed_prototypes', False):
                     text_feature_normal = (
@@ -435,30 +398,22 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             step += i * normal_loader.batch_size * 2
             if not args.skip_eval and step % 1280 == 0 and step != 0:
                 print('epoch: ', e+1, '| step: ', step, '| loss1: ', loss_total1 / (i+1), '| loss2: ', loss_total2 / (i+1), '| loss3: ', loss3.item())
-                metrics = test(
-                    model, testloader, args.visual_length, prompt_text, gt,
-                    gtsegments, gtlabels, device, logger=logger,
-                    temporal_postprocess=temporal_segment_active,
-                    temporal_smoothing_kernel=args.temporal_smoothing_kernel,
-                )
-                checkpoint_score = metrics[args.checkpoint_metric]
+                AUC, AP = test(model, testloader, args.visual_length,
+                               prompt_text, gt, gtsegments, gtlabels, device,
+                               logger=logger,
+                               temporal_postprocess=temporal_segment_active,
+                               temporal_smoothing_kernel=
+                               args.temporal_smoothing_kernel)
+                AP = AUC
 
-                if checkpoint_score > ap_best:
-                    ap_best = checkpoint_score
+                if AP > ap_best:
+                    ap_best = AP 
                     checkpoint = {
                         'epoch': e,
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
-                        'ap': ap_best,
-                        'checkpoint_metric': args.checkpoint_metric,
-                    }
+                        'ap': ap_best}
                     torch.save(checkpoint, args.checkpoint_path)
-                    logger.log(
-                        f"best_checkpoint_metric={args.checkpoint_metric} "
-                        f"best_checkpoint_score={ap_best:.6f} "
-                        f"best_checkpoint_epoch={e + 1} "
-                        f"best_checkpoint_batch={i + 1}"
-                    )
                 
         peak_vram = (torch.cuda.max_memory_allocated() / 1024 ** 3
                      if device == "cuda" else 0.0)
@@ -518,6 +473,11 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 f"{model_path.stem}_cur{model_path.suffix}"
             )
             torch.save(model.state_dict(), current_model_path)
+            if Path(args.checkpoint_path).exists():
+                checkpoint = torch.load(
+                    args.checkpoint_path, weights_only=False
+                )
+                model.load_state_dict(checkpoint['model_state_dict'])
 
     if args.skip_eval:
         torch.save(model.state_dict(), args.model_path)
