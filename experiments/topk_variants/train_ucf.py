@@ -20,7 +20,12 @@ from temporal_smoothness import (
     a_branch_temporal_smoothness,
     c_branch_temporal_smoothness,
 )
-from topk_pooling import temporal_segment_pool, topk_pool, video_topk_size
+from topk_pooling import (
+    smooth_temporal_scores,
+    temporal_segment_pool,
+    topk_pool,
+    video_topk_size,
+)
 from training_log import TrainingLogger
 import options as ucf_option
 
@@ -67,7 +72,7 @@ def CLASM(logits, labels, lengths, device, temperature=1.0,
 def CLAS2(logits, labels, lengths, device, temperature=1.0,
           pooling='soft',
           multi_k_percentages=(1.0, 5.0, 10.0, 20.0),
-          instance_k=None):
+          instance_k=None, c_temporal_smoothing_kernel=1):
     labels = 1 - labels[:, 0].reshape(labels.shape[0])
     labels = labels.to(device)
     logits = torch.sigmoid(logits).reshape(logits.shape[0], logits.shape[1])
@@ -75,8 +80,11 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
     instance_logits = []
     for i in range(logits.shape[0]):
         length = int(lengths[i].item())
+        valid_scores = smooth_temporal_scores(
+            logits[i, :length], c_temporal_smoothing_kernel
+        )
         pooled = topk_pool(
-            logits[i, :length],
+            valid_scores,
             resolve_pool_k(length, i, instance_k), pooling, temperature,
             multi_k_percentages
         )
@@ -123,6 +131,11 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         raise ValueError(
             "--temporal-smoothing-kernel must be a positive odd integer"
         )
+    if (args.c_temporal_smoothing_kernel < 1 or
+            args.c_temporal_smoothing_kernel % 2 == 0):
+        raise ValueError(
+            "--c-temporal-smoothing-kernel must be a positive odd integer"
+        )
     smoothness_enabled = args.temporal_smoothness_branch != 'none'
     if (smoothness_enabled and
             args.temporal_smoothness_start_epoch < 1):
@@ -166,6 +179,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"temporal_segment_topk={args.temporal_segment_topk} "
         f"temporal_segment_start_epoch="
         f"{args.temporal_segment_start_epoch} "
+        f"c_temporal_smoothing_kernel="
+        f"{args.c_temporal_smoothing_kernel} "
         f"temporal_smoothing_kernel={args.temporal_smoothing_kernel} "
         f"temporal_smoothness_branch={args.temporal_smoothness_branch} "
         f"temporal_smoothness_start_epoch="
@@ -225,10 +240,15 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             e + 1 >= args.temporal_smoothness_start_epoch
         )
         if args.temporal_segment_topk:
+            c_branch_pooling = (
+                'fixed_conv1d_hard_topk'
+                if args.c_temporal_smoothing_kernel > 1
+                else 'original_hard_topk'
+            )
             logger.log(
                 f"epoch={e + 1} temporal_segment_active="
                 f"{temporal_segment_active} "
-                "c_branch_pooling=original_hard_topk "
+                f"c_branch_pooling={c_branch_pooling} "
                 f"a_branch_pooling="
                 f"{'temporal_segment' if temporal_segment_active else 'original_hard_topk'}"
             )
@@ -287,7 +307,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               args.c_topk_temperature, args.topk_pooling,
                               args.multi_k_percentages,
                               None if ais_selection is None
-                              else ais_selection.batch_k)
+                              else ais_selection.batch_k,
+                              args.c_temporal_smoothing_kernel)
                 loss2 = CLASM(logits2, text_labels, feat_lengths, device,
                               args.a_topk_temperature, args.topk_pooling,
                               args.multi_k_percentages,

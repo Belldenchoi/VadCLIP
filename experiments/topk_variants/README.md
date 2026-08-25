@@ -101,6 +101,7 @@ python experiments/topk_variants/train_ucf.py \
   --topk-pooling mean \
   --temporal-segment-topk \
   --temporal-segment-start-epoch 6 \
+  --c-temporal-smoothing-kernel 1 \
   --temporal-smoothing-kernel 1 \
   --checkpoint-metric auc1 \
   --model-path outputs/ucf_temporal_segment.pth \
@@ -108,10 +109,27 @@ python experiments/topk_variants/train_ucf.py \
   --log-path outputs/ucf_temporal_segment.log
 ```
 
-`--temporal-smoothing-kernel 1` là identity. Kernel `3` hoặc `5` chỉ dùng fixed
-mean Conv1D trước khi chọn segment trong training. Evaluation luôn dùng raw
-C/A logits theo evaluator VadCLIP gốc: không smoothing, không crop và không
-chọn segment khi test.
+Hai branch có kernel độc lập. `--c-temporal-smoothing-kernel` làm mượt sigmoid
+score của C-branch trước Hard Top-K; `--temporal-smoothing-kernel` làm mượt raw
+logits của A-branch trước khi chọn segment. Kernel `1` là identity, còn `3` hoặc
+`5` dùng fixed mean Conv1D. Evaluation luôn dùng raw C/A logits theo evaluator
+VadCLIP gốc: không smoothing, không crop và không chọn segment khi test.
+
+Cấu hình Conv1D kernel `3` trên cả hai branch, trong đó C giữ Hard Top-K và A
+dùng Temporal Segment:
+
+```bash
+python experiments/topk_variants/train_ucf.py \
+  --topk-pooling mean \
+  --c-temporal-smoothing-kernel 3 \
+  --temporal-segment-topk \
+  --temporal-segment-start-epoch 1 \
+  --temporal-smoothing-kernel 3 \
+  --temporal-smoothness-branch none \
+  --model-path outputs/ucf_ca_conv1d_k3.pth \
+  --checkpoint-path outputs/ucf_ca_conv1d_k3_checkpoint.pth \
+  --log-path outputs/ucf_ca_conv1d_k3.log
+```
 
 Biến thể Weighted Temporal Segment vẫn chọn cửa sổ liên tục bằng mean, nhưng
 thay mean đều bên trong cửa sổ đã chọn bằng score-derived softmax weights:

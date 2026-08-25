@@ -14,6 +14,7 @@ from topk_pooling import (
     smooth_temporal_scores,
     soft_topk_pool,
     temporal_segment_pool,
+    topk_pool,
 )
 
 
@@ -97,6 +98,14 @@ class TemporalSegmentPoolingTests(unittest.TestCase):
                 [0.0, 4.0],
             ]),
         ))
+
+    def test_c_style_smoothing_happens_before_hard_topk(self):
+        probabilities = torch.tensor([0.1, 0.9, 0.1])
+
+        smoothed = smooth_temporal_scores(probabilities, kernel_size=3)
+        pooled = topk_pool(smoothed, k=1, mode="mean")
+
+        torch.testing.assert_close(pooled, torch.tensor(1.1 / 3.0))
 
     def test_temporal_segment_pool_backpropagates(self):
         scores = torch.tensor(

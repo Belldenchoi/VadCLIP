@@ -50,9 +50,14 @@ parser.add_argument('--temporal-segment-topk', action='store_true',
                           'contiguous segment in A-branch'))
 parser.add_argument('--temporal-segment-start-epoch', default=6, type=int,
                     help='1-based epoch where temporal segment pooling starts')
+parser.add_argument('--c-temporal-smoothing-kernel', default=1, type=int,
+                    help=('Odd fixed Conv1D mean-kernel size applied to '
+                          'C-branch sigmoid scores before Top-K pooling; '
+                          '1 disables C smoothing'))
 parser.add_argument('--temporal-smoothing-kernel', default=1, type=int,
-                    help=('Odd fixed Conv1D mean-kernel size applied before '
-                          'segment selection; 1 disables smoothing'))
+                    help=('Odd fixed Conv1D mean-kernel size applied to '
+                          'A-branch logits before segment selection; '
+                          '1 disables A smoothing'))
 parser.add_argument('--temporal-smoothness-branch',
                     choices=['none', 'c', 'a', 'both'], default='none',
                     help=('Apply L1 temporal smoothness regularization to '

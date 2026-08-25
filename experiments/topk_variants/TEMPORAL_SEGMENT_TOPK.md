@@ -8,7 +8,7 @@ liên tục.
 
 Phạm vi hiện tại:
 
-- C-branch giữ Hard Top-K gốc.
+- C-branch giữ Hard Top-K và có thể dùng fixed Conv1D trước khi chọn Top-K.
 - A-branch chuyển sang Temporal Segment Top-K.
 - Mỗi class trong A-branch chọn segment riêng.
 - Có hai cách aggregate segment: mean đều và score-weighted.
@@ -117,21 +117,23 @@ CLI:
 
 Đây là biến thể chính theo yêu cầu hiện tại.
 
-## 5. Fixed temporal smoothing trước segment
+## 5. Fixed temporal smoothing trước pooling
 
-Có thể dùng mean kernel cố định trước khi chọn segment:
+Có thể dùng mean kernel cố định trước khi pooling:
 
 ```text
 S_bar[t,c] = (1/H) × Σ(j=-r..r) S[clamp(t+j),c]
 H = 2r + 1
 ```
 
-Sau đó thay `S` bằng `S_bar` trong toàn bộ công thức ở mục 4.
+A-branch thay `S` bằng `S_bar` trong toàn bộ công thức ở mục 4. C-branch áp
+dụng cùng phép làm mượt lên `sigmoid(logits1)` rồi vẫn dùng Hard Top-K gốc.
 
 ```text
---temporal-smoothing-kernel 1   identity, không smoothing
---temporal-smoothing-kernel 3   mean 3 position
---temporal-smoothing-kernel 5   mean 5 position
+--c-temporal-smoothing-kernel 1  C identity, không smoothing
+--c-temporal-smoothing-kernel 3  C mean 3 position trước Hard Top-K
+--temporal-smoothing-kernel 1    A identity, không smoothing
+--temporal-smoothing-kernel 3    A mean 3 position trước segment
 ```
 
 Fixed smoothing không có loss weight và không thêm layer học mới.
@@ -306,26 +308,26 @@ xuất `model-path` sau khi training hoàn tất.
 
 ## 10. Thí nghiệm tối thiểu
 
-| ID | A-branch pooling | Start | Weighted | Smoothness Loss |
-|---|---|---:|---:|---:|
-| T0 | Hard Top-K gốc | — | Không | Tắt |
-| T1 | Temporal Segment mean | 1 | Không | Tắt |
-| T1W | Weighted Temporal Segment | 1 | Có, `tau=1` | Tắt |
-| S-A | Hard Top-K gốc | — | Không | A-only |
-| T1-K3-S-A | Segment mean + Conv1D `3` | 1 | Không | A-only |
+| ID | C-branch | A-branch pooling | Start | Smoothness Loss |
+|---|---|---|---:|---:|
+| T0 | Hard Top-K gốc | Hard Top-K gốc | — | Tắt |
+| T1 | Hard Top-K gốc | Temporal Segment mean | 1 | Tắt |
+| C-K3 | Conv1D `3` + Hard Top-K | Hard Top-K gốc | — | Tắt |
+| CA-K3 | Conv1D `3` + Hard Top-K | Conv1D `3` + Segment mean | 1 | Tắt |
+| S-A | Hard Top-K gốc | Hard Top-K gốc | — | A-only |
 
 So sánh quan trọng:
 
 ```text
-T0 → T1   ảnh hưởng của contiguous selection
-T1 → T1W ảnh hưởng riêng của weight trong selected segment
-T0 → S-A ảnh hưởng riêng của Temporal Smoothness Loss
-T1 → T1-K3-S-A ảnh hưởng kết hợp của Conv1D `3` và Smoothness A
+T0 → T1    ảnh hưởng của contiguous selection trên A
+T0 → C-K3 ảnh hưởng riêng của fixed Conv1D trên C
+T1 → CA-K3 ảnh hưởng thêm của fixed Conv1D trên cả C và A
+T0 → S-A  ảnh hưởng riêng của Temporal Smoothness Loss
 ```
 
-Trong T1-K3-S-A, Conv1D chỉ nằm trên đường tính classification loss `L2` của
-A-branch; Smoothness Loss được tính trên raw A-branch anomaly probability.
-C-branch và evaluation luôn giữ nguyên bản gốc.
+Trong CA-K3, C-branch dùng sigmoid score đã qua Conv1D để tính `L1`, còn A-branch
+dùng logits đã qua Conv1D và Temporal Segment để tính `L2`. Evaluation vẫn dùng
+raw C/A logits để giữ evaluator gốc.
 
 ## 11. Lệnh chạy T1W
 
