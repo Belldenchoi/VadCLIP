@@ -1,0 +1,9 @@
+# Runtime and training logs
+/*.txt
+*.log
+*.out
+*.err
+logs/
+runs/
+wandb/
+events.out.tfevents*
