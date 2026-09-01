@@ -90,7 +90,34 @@ python experiments/topk_variants/train_ucf.py \
 AIS cố ý không cho chạy đồng thời với `soft` hoặc `multi_k`, giúp mỗi thí
 nghiệm chỉ thay đổi một cơ chế pooling.
 
-### 5. Temporal Segment Top-K
+### 5. Dual-K branch-specific selection
+
+Dual-K cho C-branch va A-branch hai selector mem doc lap. Selector C dung
+binary-entropy uncertainty; selector A dung class-margin uncertainty khong can
+ground-truth class luc inference. `dual_k_c_mean` va `dual_k_a_mean` trong log
+la effective support sizes, khong phai K nguyen.
+
+```bash
+python experiments/topk_variants/train_ucf.py \
+  --train-list list/ucf_CLIP_rgb.csv \
+  --test-list list/ucf_CLIP_rgbtest.csv \
+  --topk-pooling mean \
+  --dual-k \
+  --dual-k-c-threshold 0.5 \
+  --dual-k-a-threshold 0.25 \
+  --dual-k-c-budget 0.35 \
+  --dual-k-a-budget 0.35 \
+  --model-path outputs/ucf_dual_k.pth \
+  --checkpoint-path outputs/ucf_dual_k_checkpoint.pth \
+  --log-path outputs/ucf_dual_k.log
+```
+
+Dual-K duoc thuc thi o training MIL pooling; evaluator van giu raw frame
+scoring VadCLIP goc de tranh train-test thay doi ngam. Khong bat dong thoi
+`--adaptive-instance-selection` hoac `--temporal-segment-topk` trong thi nghiem
+dau tien.
+
+### 6. Temporal Segment Top-K
 
 Hard Top-K gốc chọn K temporal position mạnh nhất và cho phép chúng nằm rời
 rạc. Temporal Segment Top-K giữ nguyên K nhưng buộc A-branch chọn một cửa sổ

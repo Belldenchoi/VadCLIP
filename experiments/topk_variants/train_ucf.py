@@ -16,6 +16,12 @@ from test_ucf import test
 from dataset_variants import UCFDataset
 from utils.tools import get_prompt_text, get_batch_label
 from adaptive_instance_selection import select_adaptive_instance_k
+from dual_k_selection import (
+    dual_constraint_loss,
+    select_a_branch,
+    select_c_branch,
+    update_dual_lambda,
+)
 from temporal_smoothness import (
     a_branch_temporal_smoothness,
     c_branch_temporal_smoothness,
@@ -40,7 +46,7 @@ def CLASM(logits, labels, lengths, device, temperature=1.0,
           pooling='soft',
           multi_k_percentages=(1.0, 5.0, 10.0, 20.0),
           instance_k=None, temporal_segment=False,
-          temporal_smoothing_kernel=1):
+          temporal_smoothing_kernel=1, selection_weights=None):
     labels = labels / torch.sum(labels, dim=1, keepdim=True)
     labels = labels.to(device)
 
@@ -52,7 +58,12 @@ def CLASM(logits, labels, lengths, device, temperature=1.0,
         for i in range(logits.shape[0]):
             length = int(lengths[i].item())
             pool_k = resolve_pool_k(length, i, instance_k)
-            if temporal_segment:
+            if selection_weights is not None:
+                weights = selection_weights[i, :length].float()
+                pooled = (
+                    weights * logits[i, :length].float()
+                ).sum(dim=0) / (weights.sum(dim=0) + 1e-6)
+            elif temporal_segment:
                 pooled = temporal_segment_pool(
                     logits[i, :length], pool_k,
                     temporal_smoothing_kernel
@@ -72,7 +83,8 @@ def CLASM(logits, labels, lengths, device, temperature=1.0,
 def CLAS2(logits, labels, lengths, device, temperature=1.0,
           pooling='soft',
           multi_k_percentages=(1.0, 5.0, 10.0, 20.0),
-          instance_k=None, c_temporal_smoothing_kernel=1):
+          instance_k=None, c_temporal_smoothing_kernel=1,
+          selection_weights=None):
     labels = 1 - labels[:, 0].reshape(labels.shape[0])
     labels = labels.to(device)
     logits = torch.sigmoid(logits).reshape(logits.shape[0], logits.shape[1])
@@ -83,11 +95,15 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
         valid_scores = smooth_temporal_scores(
             logits[i, :length], c_temporal_smoothing_kernel
         )
-        pooled = topk_pool(
-            valid_scores,
-            resolve_pool_k(length, i, instance_k), pooling, temperature,
-            multi_k_percentages
-        )
+        if selection_weights is not None:
+            weights = selection_weights[i, :length].float()
+            pooled = (weights * valid_scores).sum() / (weights.sum() + 1e-6)
+        else:
+            pooled = topk_pool(
+                valid_scores,
+                resolve_pool_k(length, i, instance_k), pooling, temperature,
+                multi_k_percentages
+            )
         instance_logits.append(pooled)
     instance_logits = torch.stack(instance_logits)
 
@@ -103,6 +119,15 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
 
 def train(model, normal_loader, anomaly_loader, testloader, args, label_map, device):
     model.to(device)
+    if args.dual_k and args.adaptive_instance_selection:
+        raise ValueError("Dual-K cannot be combined with AIS")
+    if args.dual_k and args.temporal_segment_topk:
+        raise ValueError("Dual-K cannot be combined with temporal segment Top-K")
+    if args.dual_k and args.topk_pooling != 'mean':
+        raise ValueError("Use --topk-pooling mean with --dual-k")
+    if args.dual_k and not (0.0 <= args.dual_k_c_budget <= 1.0 and
+                            0.0 <= args.dual_k_a_budget <= 1.0):
+        raise ValueError("Dual-K uncertainty budgets must be in [0, 1]")
     if args.adaptive_instance_selection and args.topk_pooling != 'mean':
         raise ValueError(
             "Adaptive Instance Selection is a separate mean Top-K method. "
@@ -174,6 +199,11 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"topk_pooling={args.topk_pooling} "
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
+        f"dual_k={args.dual_k} "
+        f"dual_k_c_threshold={args.dual_k_c_threshold} "
+        f"dual_k_a_threshold={args.dual_k_a_threshold} "
+        f"dual_k_c_budget={args.dual_k_c_budget} "
+        f"dual_k_a_budget={args.dual_k_a_budget} "
         f"ais_score_threshold={args.ais_score_threshold} "
         f"ais_min_k={args.ais_min_k} "
         f"temporal_segment_topk={args.temporal_segment_topk} "
@@ -193,6 +223,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
     prompt_text = get_prompt_text(label_map)
     ap_best = 0
     start_epoch = 0
+    dual_lambda_c = float(args.dual_k_c_lambda)
+    dual_lambda_a = float(args.dual_k_a_lambda)
 
     if args.use_checkpoint == True:
         checkpoint = torch.load(
@@ -215,6 +247,13 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             np.random.set_state(checkpoint['numpy_rng_state'])
         if 'python_rng_state' in checkpoint:
             random.setstate(checkpoint['python_rng_state'])
+        if args.dual_k:
+            dual_lambda_c = float(
+                checkpoint.get('dual_lambda_c', dual_lambda_c)
+            )
+            dual_lambda_a = float(
+                checkpoint.get('dual_lambda_a', dual_lambda_a)
+            )
         start_epoch = checkpoint.get(
             'next_epoch', checkpoint.get('epoch', -1) + 1
         )
@@ -290,6 +329,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     visual_features, None, prompt_text, feat_lengths
                 )
                 ais_selection = None
+                dual_c_selection = None
+                dual_a_selection = None
                 if args.adaptive_instance_selection:
                     pair_count = normal_features.shape[0]
                     c_probabilities = torch.sigmoid(
@@ -303,19 +344,34 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         score_threshold=args.ais_score_threshold,
                         min_k=args.ais_min_k,
                     )
+                if args.dual_k:
+                    dual_c_selection = select_c_branch(
+                        logits1, feat_lengths, dual_lambda_c,
+                        threshold=args.dual_k_c_threshold,
+                        temperature=args.dual_k_c_temperature,
+                    )
+                    dual_a_selection = select_a_branch(
+                        logits2, feat_lengths, dual_lambda_a,
+                        threshold=args.dual_k_a_threshold,
+                        temperature=args.dual_k_a_temperature,
+                    )
                 loss1 = CLAS2(logits1, text_labels, feat_lengths, device,
                               args.c_topk_temperature, args.topk_pooling,
                               args.multi_k_percentages,
                               None if ais_selection is None
                               else ais_selection.batch_k,
-                              args.c_temporal_smoothing_kernel)
+                              args.c_temporal_smoothing_kernel,
+                              None if dual_c_selection is None
+                              else dual_c_selection.weights)
                 loss2 = CLASM(logits2, text_labels, feat_lengths, device,
                               args.a_topk_temperature, args.topk_pooling,
                               args.multi_k_percentages,
                               None if ais_selection is None
                               else ais_selection.batch_k,
                               temporal_segment_active,
-                              args.temporal_smoothing_kernel)
+                              args.temporal_smoothing_kernel,
+                              None if dual_a_selection is None
+                              else dual_a_selection.weights)
                 loss3 = torch.zeros(1, device=device)
                 if not getattr(model, 'uses_fixed_prototypes', False):
                     text_feature_normal = (
@@ -358,6 +414,27 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     loss1 + loss2 + loss3
                     + weighted_smooth_c + weighted_smooth_a
                 )
+                dual_loss_c = torch.zeros((), device=device)
+                dual_loss_a = torch.zeros((), device=device)
+                if args.dual_k:
+                    dual_loss_c = dual_constraint_loss(
+                        dual_c_selection, args.dual_k_c_budget
+                    )
+                    dual_loss_a = dual_constraint_loss(
+                        dual_a_selection, args.dual_k_a_budget
+                    )
+                    loss = loss + args.dual_k_loss_weight * (
+                        dual_lambda_c * dual_loss_c
+                        + dual_lambda_a * dual_loss_a
+                    )
+
+            if args.dual_k:
+                dual_lambda_c = update_dual_lambda(
+                    dual_lambda_c, dual_loss_c, args.dual_k_dual_lr
+                )
+                dual_lambda_a = update_dual_lambda(
+                    dual_lambda_a, dual_loss_a, args.dual_k_dual_lr
+                )
 
             loss_total1 += loss1.item()
             loss_total2 += loss2.item()
@@ -396,6 +473,20 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         f"ais_confident_mean="
                         f"{ais_selection.confident_positive_count.float().mean().item():.3f} "
                     )
+                dual_text = ""
+                if args.dual_k:
+                    dual_text = (
+                        f"dual_k_c_mean="
+                        f"{dual_c_selection.effective_k.mean().item():.3f} "
+                        f"dual_k_a_mean="
+                        f"{dual_a_selection.effective_k.mean().item():.3f} "
+                        f"dual_r_c="
+                        f"{dual_c_selection.uncertainty_ratio.mean().item():.4f} "
+                        f"dual_r_a="
+                        f"{dual_a_selection.uncertainty_ratio.mean().item():.4f} "
+                        f"dual_lambda_c={dual_lambda_c:.4f} "
+                        f"dual_lambda_a={dual_lambda_a:.4f} "
+                    )
                 logger.log(
                     f"epoch={e + 1}/{args.max_epoch} batch={i + 1}/{num_batches} "
                     f"loss={loss.item():.4f} loss1={loss1.item():.4f} "
@@ -406,6 +497,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     f"weighted_smooth_a={weighted_smooth_a.item():.6f} "
                     f"lr={optimizer.param_groups[0]['lr']:.2e} "
                     f"{ais_text}"
+                    f"{dual_text}"
                     f"peak_vram={peak_vram:.2f}GB"
                 )
             step += i * normal_loader.batch_size * 2
@@ -422,6 +514,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         'epoch': e,
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
+                        'dual_lambda_c': dual_lambda_c,
+                        'dual_lambda_a': dual_lambda_a,
                         'ap': ap_best}
                     torch.save(checkpoint, args.checkpoint_path)
                 
@@ -462,6 +556,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'scaler_state_dict': scaler.state_dict(),
+                'dual_lambda_c': dual_lambda_c,
+                'dual_lambda_a': dual_lambda_a,
                 'ap': ap_best,
                 'torch_rng_state': torch.get_rng_state(),
                 'cuda_rng_state_all': (

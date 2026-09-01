@@ -75,6 +75,29 @@ parser.add_argument('--ais-score-threshold', default=0.9, type=float,
                     help='Positive C-score threshold counted by AIS')
 parser.add_argument('--ais-min-k', default=1, type=int,
                     help='Minimum K selected by AIS')
+parser.add_argument('--dual-k', action='store_true',
+                    help=('Use independent differentiable C/A selectors with '
+                          'branch-specific uncertainty dual variables'))
+parser.add_argument('--dual-k-c-threshold', default=0.5, type=float,
+                    help='C-branch soft selector evidence threshold')
+parser.add_argument('--dual-k-a-threshold', default=0.25, type=float,
+                    help='A-branch soft selector class-posterior threshold')
+parser.add_argument('--dual-k-c-temperature', default=0.15, type=float,
+                    help='C-branch soft selector temperature')
+parser.add_argument('--dual-k-a-temperature', default=0.15, type=float,
+                    help='A-branch soft selector temperature')
+parser.add_argument('--dual-k-c-budget', default=0.35, type=float,
+                    help='Maximum mean C-branch uncertainty budget')
+parser.add_argument('--dual-k-a-budget', default=0.35, type=float,
+                    help='Maximum mean A-branch uncertainty budget')
+parser.add_argument('--dual-k-c-lambda', default=0.0, type=float,
+                    help='Initial C-branch dual variable')
+parser.add_argument('--dual-k-a-lambda', default=0.0, type=float,
+                    help='Initial A-branch dual variable')
+parser.add_argument('--dual-k-dual-lr', default=0.01, type=float,
+                    help='Projected-ascent learning rate for dual variables')
+parser.add_argument('--dual-k-loss-weight', default=0.1, type=float,
+                    help='Weight for uncertainty constraint losses')
 parser.add_argument('--train-list', default='list/ucf_CLIP_rgb.csv')
 parser.add_argument('--test-list', default='list/ucf_CLIP_rgbtest.csv')
 parser.add_argument('--gt-path', default='list/gt_ucf.npy')
