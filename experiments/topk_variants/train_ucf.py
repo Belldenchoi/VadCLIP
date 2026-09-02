@@ -18,6 +18,7 @@ from utils.tools import get_prompt_text, get_batch_label
 from adaptive_instance_selection import select_adaptive_instance_k
 from dual_k_selection import (
     dual_constraint_loss,
+    selection_statistics,
     select_a_branch,
     select_c_branch,
     update_dual_lambda,
@@ -119,6 +120,8 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
 
 def train(model, normal_loader, anomaly_loader, testloader, args, label_map, device):
     model.to(device)
+    if args.dual_k_diagnostics_only and not args.dual_k:
+        raise ValueError("--dual-k-diagnostics-only requires --dual-k")
     if args.dual_k and args.adaptive_instance_selection:
         raise ValueError("Dual-K cannot be combined with AIS")
     if args.dual_k and args.temporal_segment_topk:
@@ -128,6 +131,17 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
     if args.dual_k and not (0.0 <= args.dual_k_c_budget <= 1.0 and
                             0.0 <= args.dual_k_a_budget <= 1.0):
         raise ValueError("Dual-K uncertainty budgets must be in [0, 1]")
+    if (args.dual_k and
+            (args.dual_k_c_temperature <= 0 or
+             args.dual_k_a_temperature <= 0)):
+        raise ValueError("Dual-K temperatures must be positive")
+    if (args.dual_k and
+            (args.dual_k_c_lambda < 0 or args.dual_k_a_lambda < 0)):
+        raise ValueError("Initial Dual-K variables must be non-negative")
+    if args.dual_k and args.dual_k_dual_lr < 0:
+        raise ValueError("--dual-k-dual-lr must be non-negative")
+    if args.dual_k and args.dual_k_loss_weight < 0:
+        raise ValueError("--dual-k-loss-weight must be non-negative")
     if args.adaptive_instance_selection and args.topk_pooling != 'mean':
         raise ValueError(
             "Adaptive Instance Selection is a separate mean Top-K method. "
@@ -200,10 +214,22 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
         f"dual_k={args.dual_k} "
+        f"dual_k_diagnostics_only={args.dual_k_diagnostics_only} "
+        f"dual_k_evidence_normalization="
+        f"{args.dual_k_evidence_normalization} "
+        f"dual_k_a_risk_scope={args.dual_k_a_risk_scope} "
         f"dual_k_c_threshold={args.dual_k_c_threshold} "
         f"dual_k_a_threshold={args.dual_k_a_threshold} "
+        f"dual_k_c_temperature={args.dual_k_c_temperature} "
+        f"dual_k_a_temperature={args.dual_k_a_temperature} "
         f"dual_k_c_budget={args.dual_k_c_budget} "
         f"dual_k_a_budget={args.dual_k_a_budget} "
+        f"dual_k_c_initial_lambda={args.dual_k_c_lambda} "
+        f"dual_k_a_initial_lambda={args.dual_k_a_lambda} "
+        f"dual_k_dual_lr={args.dual_k_dual_lr} "
+        f"dual_k_loss_weight={args.dual_k_loss_weight} "
+        f"dual_k_c_uncertainty=normalized_binary_entropy "
+        f"dual_k_a_uncertainty=clamped_class_margin "
         f"ais_score_threshold={args.ais_score_threshold} "
         f"ais_min_k={args.ais_min_k} "
         f"temporal_segment_topk={args.temporal_segment_topk} "
@@ -345,15 +371,20 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         min_k=args.ais_min_k,
                     )
                 if args.dual_k:
+                    normalize_dual_evidence = (
+                        args.dual_k_evidence_normalization == 'per_video'
+                    )
                     dual_c_selection = select_c_branch(
                         logits1, feat_lengths, dual_lambda_c,
                         threshold=args.dual_k_c_threshold,
                         temperature=args.dual_k_c_temperature,
+                        normalize_evidence=normalize_dual_evidence,
                     )
                     dual_a_selection = select_a_branch(
                         logits2, feat_lengths, dual_lambda_a,
                         threshold=args.dual_k_a_threshold,
                         temperature=args.dual_k_a_temperature,
+                        normalize_evidence=normalize_dual_evidence,
                     )
                 loss1 = CLAS2(logits1, text_labels, feat_lengths, device,
                               args.c_topk_temperature, args.topk_pooling,
@@ -361,7 +392,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               None if ais_selection is None
                               else ais_selection.batch_k,
                               args.c_temporal_smoothing_kernel,
-                              None if dual_c_selection is None
+                              None if (dual_c_selection is None or
+                                       args.dual_k_diagnostics_only)
                               else dual_c_selection.weights)
                 loss2 = CLASM(logits2, text_labels, feat_lengths, device,
                               args.a_topk_temperature, args.topk_pooling,
@@ -370,7 +402,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               else ais_selection.batch_k,
                               temporal_segment_active,
                               args.temporal_smoothing_kernel,
-                              None if dual_a_selection is None
+                              None if (dual_a_selection is None or
+                                       args.dual_k_diagnostics_only)
                               else dual_a_selection.weights)
                 loss3 = torch.zeros(1, device=device)
                 if not getattr(model, 'uses_fixed_prototypes', False):
@@ -417,18 +450,25 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 dual_loss_c = torch.zeros((), device=device)
                 dual_loss_a = torch.zeros((), device=device)
                 if args.dual_k:
+                    a_constraint_weights = (
+                        text_labels
+                        if args.dual_k_a_risk_scope == 'target_class'
+                        else None
+                    )
                     dual_loss_c = dual_constraint_loss(
                         dual_c_selection, args.dual_k_c_budget
                     )
                     dual_loss_a = dual_constraint_loss(
-                        dual_a_selection, args.dual_k_a_budget
+                        dual_a_selection, args.dual_k_a_budget,
+                        a_constraint_weights,
                     )
-                    loss = loss + args.dual_k_loss_weight * (
-                        dual_lambda_c * dual_loss_c
-                        + dual_lambda_a * dual_loss_a
-                    )
+                    if not args.dual_k_diagnostics_only:
+                        loss = loss + args.dual_k_loss_weight * (
+                            dual_lambda_c * dual_loss_c
+                            + dual_lambda_a * dual_loss_a
+                        )
 
-            if args.dual_k:
+            if args.dual_k and not args.dual_k_diagnostics_only:
                 dual_lambda_c = update_dual_lambda(
                     dual_lambda_c, dual_loss_c, args.dual_k_dual_lr
                 )
@@ -475,17 +515,75 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     )
                 dual_text = ""
                 if args.dual_k:
+                    dual_c_stats = selection_statistics(
+                        dual_c_selection
+                    )
+                    dual_a_stats = selection_statistics(
+                        dual_a_selection, text_labels
+                    )
+                    dual_a_all_class_k = (
+                        dual_a_selection.effective_k.mean()
+                    )
+                    dual_a_all_class_risk = (
+                        dual_a_selection.uncertainty_ratio.mean()
+                    )
                     dual_text = (
                         f"dual_k_c_mean="
-                        f"{dual_c_selection.effective_k.mean().item():.3f} "
-                        f"dual_k_a_mean="
-                        f"{dual_a_selection.effective_k.mean().item():.3f} "
-                        f"dual_r_c="
-                        f"{dual_c_selection.uncertainty_ratio.mean().item():.4f} "
-                        f"dual_r_a="
-                        f"{dual_a_selection.uncertainty_ratio.mean().item():.4f} "
+                        f"{dual_c_stats['k_mean'].item():.3f} "
+                        f"dual_k_a_target_mean="
+                        f"{dual_a_stats['k_mean'].item():.3f} "
+                        f"dual_k_a_all_class_mean="
+                        f"{dual_a_all_class_k.item():.3f} "
+                        f"dual_support_ratio_c="
+                        f"{dual_c_stats['support_ratio'].item():.4f} "
+                        f"dual_support_ratio_a_target="
+                        f"{dual_a_stats['support_ratio'].item():.4f} "
+                        f"dual_r_c={dual_c_stats['risk'].item():.4f} "
+                        f"dual_r_c_q40={dual_c_stats['risk_q40'].item():.4f} "
+                        f"dual_r_c_q50={dual_c_stats['risk_q50'].item():.4f} "
+                        f"dual_r_c_q60={dual_c_stats['risk_q60'].item():.4f} "
+                        f"dual_r_a_target="
+                        f"{dual_a_stats['risk'].item():.4f} "
+                        f"dual_r_a_target_q40="
+                        f"{dual_a_stats['risk_q40'].item():.4f} "
+                        f"dual_r_a_target_q50="
+                        f"{dual_a_stats['risk_q50'].item():.4f} "
+                        f"dual_r_a_target_q60="
+                        f"{dual_a_stats['risk_q60'].item():.4f} "
+                        f"dual_r_a_all_class="
+                        f"{dual_a_all_class_risk.item():.4f} "
+                        f"dual_r_a_constraint="
+                        f"{(dual_loss_a + args.dual_k_a_budget).item():.4f} "
+                        f"dual_violation_c={dual_loss_c.item():.4f} "
+                        f"dual_violation_a={dual_loss_a.item():.4f} "
                         f"dual_lambda_c={dual_lambda_c:.4f} "
                         f"dual_lambda_a={dual_lambda_a:.4f} "
+                        f"dual_e_c_mean={dual_c_stats['e_mean'].item():.4f} "
+                        f"dual_e_c_std={dual_c_stats['e_std'].item():.4f} "
+                        f"dual_e_c_min={dual_c_stats['e_min'].item():.4f} "
+                        f"dual_e_c_max={dual_c_stats['e_max'].item():.4f} "
+                        f"dual_e_c_norm_mean="
+                        f"{dual_c_stats['e_norm_mean'].item():.4f} "
+                        f"dual_e_c_norm_std="
+                        f"{dual_c_stats['e_norm_std'].item():.4f} "
+                        f"dual_e_a_target_mean="
+                        f"{dual_a_stats['e_mean'].item():.4f} "
+                        f"dual_e_a_target_std="
+                        f"{dual_a_stats['e_std'].item():.4f} "
+                        f"dual_e_a_target_min="
+                        f"{dual_a_stats['e_min'].item():.4f} "
+                        f"dual_e_a_target_max="
+                        f"{dual_a_stats['e_max'].item():.4f} "
+                        f"dual_e_a_norm_target_mean="
+                        f"{dual_a_stats['e_norm_mean'].item():.4f} "
+                        f"dual_e_a_norm_target_std="
+                        f"{dual_a_stats['e_norm_std'].item():.4f} "
+                        f"dual_u_c_mean={dual_c_stats['u_mean'].item():.4f} "
+                        f"dual_u_c_std={dual_c_stats['u_std'].item():.4f} "
+                        f"dual_u_a_target_mean="
+                        f"{dual_a_stats['u_mean'].item():.4f} "
+                        f"dual_u_a_target_std="
+                        f"{dual_a_stats['u_std'].item():.4f} "
                     )
                 logger.log(
                     f"epoch={e + 1}/{args.max_epoch} batch={i + 1}/{num_batches} "

@@ -78,18 +78,34 @@ parser.add_argument('--ais-min-k', default=1, type=int,
 parser.add_argument('--dual-k', action='store_true',
                     help=('Use independent differentiable C/A selectors with '
                           'branch-specific uncertainty dual variables'))
+parser.add_argument('--dual-k-diagnostics-only', action='store_true',
+                    help=('Compute and log Dual-K selectors without changing '
+                          'MIL pooling, loss, or dual variables'))
+parser.add_argument('--dual-k-evidence-normalization',
+                    choices=('none', 'per_video'), default='per_video',
+                    help=('Selector evidence scale: original probability '
+                          'gates or valid-length per-video z-scores'))
+parser.add_argument('--dual-k-a-risk-scope',
+                    choices=('target_class', 'all_classes'),
+                    default='target_class',
+                    help=('A uncertainty ratios used by the scalar dual '
+                          'constraint'))
 parser.add_argument('--dual-k-c-threshold', default=0.5, type=float,
-                    help='C-branch soft selector evidence threshold')
+                    help=('C-branch threshold on per-video standardized '
+                          'anomaly evidence'))
 parser.add_argument('--dual-k-a-threshold', default=0.25, type=float,
-                    help='A-branch soft selector class-posterior threshold')
+                    help=('A-branch threshold on per-video, per-class '
+                          'standardized semantic evidence'))
 parser.add_argument('--dual-k-c-temperature', default=0.15, type=float,
                     help='C-branch soft selector temperature')
 parser.add_argument('--dual-k-a-temperature', default=0.15, type=float,
                     help='A-branch soft selector temperature')
 parser.add_argument('--dual-k-c-budget', default=0.35, type=float,
-                    help='Maximum mean C-branch uncertainty budget')
+                    help=('Maximum selected C uncertainty in [0, 1]; '
+                          'calibrate from diagnostic risk quantiles'))
 parser.add_argument('--dual-k-a-budget', default=0.35, type=float,
-                    help='Maximum mean A-branch uncertainty budget')
+                    help=('Maximum selected target-class A uncertainty in '
+                          '[0, 1]; calibrate from diagnostic risk quantiles'))
 parser.add_argument('--dual-k-c-lambda', default=0.0, type=float,
                     help='Initial C-branch dual variable')
 parser.add_argument('--dual-k-a-lambda', default=0.0, type=float,

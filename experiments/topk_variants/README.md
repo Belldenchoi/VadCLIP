@@ -92,10 +92,16 @@ nghiệm chỉ thay đổi một cơ chế pooling.
 
 ### 5. Dual-K branch-specific selection
 
-Dual-K cho C-branch va A-branch hai selector mem doc lap. Selector C dung
-binary-entropy uncertainty; selector A dung class-margin uncertainty khong can
-ground-truth class luc inference. `dual_k_c_mean` va `dual_k_a_mean` trong log
-la effective support sizes, khong phai K nguyen.
+Dual-K cho C-branch và A-branch hai selector mềm độc lập. Bản revised-minimal
+chuẩn hóa evidence theo trục thời gian hợp lệ của từng video trước sigmoid
+gate. C dùng binary entropy đã chuẩn hóa về `[0, 1]`; A dùng class-margin
+uncertainty `clamp(1 - (p_c - max_other), 0, 1)`. Weighted MIL vẫn tổng hợp
+score gốc, không tổng hợp z-score.
+
+A-selector tạo weight cho từng class để CLASM vẫn trả đủ logits. Riêng A-risk
+dùng cho scalar dual update chỉ lấy class mục tiêu theo video-level label, đúng
+với formulation `M[t, y]` trong thiết kế. Evaluator vẫn dùng raw frame scoring
+của VadCLIP gốc.
 
 ```bash
 python experiments/topk_variants/train_ucf.py \
@@ -103,6 +109,10 @@ python experiments/topk_variants/train_ucf.py \
   --test-list list/ucf_CLIP_rgbtest.csv \
   --topk-pooling mean \
   --dual-k \
+  --dual-k-evidence-normalization per_video \
+  --dual-k-a-risk-scope target_class \
+  --c-temporal-smoothing-kernel 1 \
+  --temporal-smoothness-branch none \
   --dual-k-c-threshold 0.5 \
   --dual-k-a-threshold 0.25 \
   --dual-k-c-budget 0.35 \
@@ -112,10 +122,24 @@ python experiments/topk_variants/train_ucf.py \
   --log-path outputs/ucf_dual_k.log
 ```
 
-Dual-K duoc thuc thi o training MIL pooling; evaluator van giu raw frame
-scoring VadCLIP goc de tranh train-test thay doi ngam. Khong bat dong thoi
-`--adaptive-instance-selection` hoac `--temporal-segment-topk` trong thi nghiem
-dau tien.
+Để chạy Experiment A trong roadmap (chỉ đo scale, giữ nguyên hard Top-K/loss
+baseline và không update lambda), thêm `--dual-k-diagnostics-only` và dùng
+`--dual-k-evidence-normalization none`. Công tắc `none` giữ probability gate
+cũ để đối chiếu; `per_video` bật revised z-score gate.
+
+Hai budget `0.35` ở trên chỉ là giá trị khởi đầu để chạy diagnostic, không phải
+giá trị đã được chứng minh tối ưu. Hãy dùng `dual_r_c`, `dual_r_a_target` và
+quantile `q40/q50/q60` tương ứng để chọn empirical risk budget; sau đó theo dõi
+`dual_violation_c/a`. Log còn ghi
+`dual_support_ratio_c/a_target`, raw/normalized evidence statistics,
+uncertainty statistics, target-class K và all-class K. Nếu violation luôn âm
+và lambda về 0, constraint vẫn đang quá lỏng.
+
+Implementation này chưa thêm range regularizer hoặc support dual. Theo roadmap
+debug, chỉ thêm support constraint sau khi normalization và active uncertainty
+budget vẫn cho thấy support explosion. Không bật đồng thời
+`--adaptive-instance-selection` hoặc `--temporal-segment-topk` trong thí nghiệm
+Dual-K cô lập.
 
 ### 6. Temporal Segment Top-K
 
