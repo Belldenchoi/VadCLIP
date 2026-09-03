@@ -50,6 +50,13 @@ parser.add_argument('--temporal-segment-topk', action='store_true',
                           'contiguous segment in A-branch'))
 parser.add_argument('--temporal-segment-start-epoch', default=6, type=int,
                     help='1-based epoch where temporal segment pooling starts')
+parser.add_argument('--c-temporal-segment-topk', action='store_true',
+                    help=('Use the best contiguous temporal segment for '
+                          'C-branch Top-K pooling; combine with '
+                          '--temporal-segment-topk for both branches'))
+parser.add_argument('--c-temporal-segment-start-epoch', default=1, type=int,
+                    help=('1-based epoch where C-branch temporal segment '
+                         'pooling starts'))
 parser.add_argument('--c-temporal-smoothing-kernel', default=1, type=int,
                     help=('Odd fixed Conv1D mean-kernel size applied to '
                           'C-branch sigmoid scores before Top-K pooling; '

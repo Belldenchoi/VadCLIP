@@ -85,7 +85,7 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
           pooling='soft',
           multi_k_percentages=(1.0, 5.0, 10.0, 20.0),
           instance_k=None, c_temporal_smoothing_kernel=1,
-          selection_weights=None):
+          selection_weights=None, temporal_segment=False):
     labels = 1 - labels[:, 0].reshape(labels.shape[0])
     labels = labels.to(device)
     logits = torch.sigmoid(logits).reshape(logits.shape[0], logits.shape[1])
@@ -93,13 +93,23 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
     instance_logits = []
     for i in range(logits.shape[0]):
         length = int(lengths[i].item())
-        valid_scores = smooth_temporal_scores(
-            logits[i, :length], c_temporal_smoothing_kernel
-        )
+        raw_scores = logits[i, :length]
         if selection_weights is not None:
+            valid_scores = smooth_temporal_scores(
+                raw_scores, c_temporal_smoothing_kernel
+            )
             weights = selection_weights[i, :length].float()
             pooled = (weights * valid_scores).sum() / (weights.sum() + 1e-6)
+        elif temporal_segment:
+            pooled = temporal_segment_pool(
+                raw_scores,
+                resolve_pool_k(length, i, instance_k),
+                c_temporal_smoothing_kernel,
+            )
         else:
+            valid_scores = smooth_temporal_scores(
+                raw_scores, c_temporal_smoothing_kernel
+            )
             pooled = topk_pool(
                 valid_scores,
                 resolve_pool_k(length, i, instance_k), pooling, temperature,
@@ -126,6 +136,10 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         raise ValueError("Dual-K cannot be combined with AIS")
     if args.dual_k and args.temporal_segment_topk:
         raise ValueError("Dual-K cannot be combined with temporal segment Top-K")
+    if args.dual_k and args.c_temporal_segment_topk:
+        raise ValueError(
+            "Dual-K cannot be combined with C-branch temporal segment Top-K"
+        )
     if args.dual_k and args.topk_pooling != 'mean':
         raise ValueError("Use --topk-pooling mean with --dual-k")
     if args.dual_k and not (0.0 <= args.dual_k_c_budget <= 1.0 and
@@ -169,6 +183,21 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
              args.temporal_smoothing_kernel % 2 == 0)):
         raise ValueError(
             "--temporal-smoothing-kernel must be a positive odd integer"
+        )
+    if args.c_temporal_segment_topk and args.topk_pooling != 'mean':
+        raise ValueError(
+            "C-branch temporal segment Top-K is an isolated hard Top-K "
+            "experiment. Use --topk-pooling mean."
+        )
+    if args.c_temporal_segment_topk and args.adaptive_instance_selection:
+        raise ValueError(
+            "C-branch temporal segment Top-K cannot be combined with "
+            "Adaptive Instance Selection."
+        )
+    if (args.c_temporal_segment_topk and
+            args.c_temporal_segment_start_epoch < 1):
+        raise ValueError(
+            "--c-temporal-segment-start-epoch must be at least 1"
         )
     if (args.c_temporal_smoothing_kernel < 1 or
             args.c_temporal_smoothing_kernel % 2 == 0):
@@ -235,6 +264,9 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"temporal_segment_topk={args.temporal_segment_topk} "
         f"temporal_segment_start_epoch="
         f"{args.temporal_segment_start_epoch} "
+        f"c_temporal_segment_topk={args.c_temporal_segment_topk} "
+        f"c_temporal_segment_start_epoch="
+        f"{args.c_temporal_segment_start_epoch} "
         f"c_temporal_smoothing_kernel="
         f"{args.c_temporal_smoothing_kernel} "
         f"temporal_smoothing_kernel={args.temporal_smoothing_kernel} "
@@ -300,19 +332,26 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             args.temporal_segment_topk and
             e + 1 >= args.temporal_segment_start_epoch
         )
+        c_temporal_segment_active = (
+            args.c_temporal_segment_topk and
+            e + 1 >= args.c_temporal_segment_start_epoch
+        )
         temporal_smoothness_active = (
             smoothness_enabled and
             e + 1 >= args.temporal_smoothness_start_epoch
         )
-        if args.temporal_segment_topk:
+        if args.temporal_segment_topk or args.c_temporal_segment_topk:
             c_branch_pooling = (
-                'fixed_conv1d_hard_topk'
-                if args.c_temporal_smoothing_kernel > 1
-                else 'original_hard_topk'
+                'contiguous_conv1d_topk'
+                if c_temporal_segment_active
+                else ('fixed_conv1d_hard_topk'
+                      if args.c_temporal_smoothing_kernel > 1
+                      else 'original_hard_topk')
             )
             logger.log(
                 f"epoch={e + 1} temporal_segment_active="
                 f"{temporal_segment_active} "
+                f"c_temporal_segment_active={c_temporal_segment_active} "
                 f"c_branch_pooling={c_branch_pooling} "
                 f"a_branch_pooling="
                 f"{'temporal_segment' if temporal_segment_active else 'original_hard_topk'}"
@@ -394,7 +433,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               args.c_temporal_smoothing_kernel,
                               None if (dual_c_selection is None or
                                        args.dual_k_diagnostics_only)
-                              else dual_c_selection.weights)
+                              else dual_c_selection.weights,
+                              temporal_segment=c_temporal_segment_active)
                 loss2 = CLASM(logits2, text_labels, feat_lengths, device,
                               args.a_topk_temperature, args.topk_pooling,
                               args.multi_k_percentages,

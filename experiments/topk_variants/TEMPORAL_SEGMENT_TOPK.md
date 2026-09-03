@@ -9,6 +9,8 @@ liên tục.
 Phạm vi hiện tại:
 
 - C-branch giữ Hard Top-K và có thể dùng fixed Conv1D trước khi chọn Top-K.
+- Có thể bật thêm `--c-temporal-segment-topk` để C-branch cũng chọn một
+  contiguous segment; mặc định cờ này tắt để bảo toàn ablation C-gốc.
 - A-branch chuyển sang Temporal Segment Top-K.
 - Mỗi class trong A-branch chọn segment riêng.
 - Có hai cách aggregate segment: mean đều và score-weighted.
@@ -127,7 +129,8 @@ H = 2r + 1
 ```
 
 A-branch thay `S` bằng `S_bar` trong toàn bộ công thức ở mục 4. C-branch áp
-dụng cùng phép làm mượt lên `sigmoid(logits1)` rồi vẫn dùng Hard Top-K gốc.
+dụng cùng phép làm mượt lên `sigmoid(logits1)` rồi mặc định vẫn dùng Hard Top-K
+gốc; khi bật `--c-temporal-segment-topk`, C-branch cũng dùng contiguous Top-K.
 
 ```text
 --c-temporal-smoothing-kernel 1  C identity, không smoothing
@@ -137,6 +140,26 @@ dụng cùng phép làm mượt lên `sigmoid(logits1)` rồi vẫn dùng Hard T
 ```
 
 Fixed smoothing không có loss weight và không thêm layer học mới.
+
+### 5.1. Contiguous Top-K cho C-branch
+
+Khi bật `--c-temporal-segment-topk`, C-branch dùng cùng quy tắc cửa sổ liên tục
+như A-branch, sau bước smoothing tùy chọn:
+
+```text
+p_C_bar[t] = Smooth(sigmoid(logits1[t]))
+z_C        = max_s mean(p_C_bar[s:s+K])
+```
+
+Để dùng contiguous Top-K trên cả hai branch, bật đồng thời:
+
+```text
+--c-temporal-segment-topk
+--temporal-segment-topk
+```
+
+Hai cờ dùng các tham số start epoch riêng; mặc định C bắt đầu từ epoch 1 còn A
+bắt đầu từ epoch 6.
 
 ## 6. Temporal Smoothness Loss
 
