@@ -34,6 +34,12 @@ from topk_pooling import (
     video_topk_size,
 )
 from training_log import TrainingLogger
+from temperature_schedule import (
+    epoch_temperatures,
+    temperature_config,
+    validate_checkpoint_temperature,
+    validate_temperature_config,
+)
 import options as ucf_option
 
 
@@ -129,6 +135,7 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
     return clsloss
 
 def train(model, normal_loader, anomaly_loader, testloader, args, label_map, device):
+    validate_temperature_config(args)
     model.to(device)
     if args.dual_k_diagnostics_only and not args.dual_k:
         raise ValueError("--dual-k-diagnostics-only requires --dual-k")
@@ -240,6 +247,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"batch_size={args.batch_size} accumulation={accumulation_steps} "
         f"actions={args.train_actions or 'all'} "
         f"topk_pooling={args.topk_pooling} "
+        f"topk_temperature_config={temperature_config(args)} "
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
         f"dual_k={args.dual_k} "
@@ -288,6 +296,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         checkpoint = torch.load(
             args.checkpoint_path, map_location=device, weights_only=False
         )
+        validate_checkpoint_temperature(args, checkpoint)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if 'scheduler_state_dict' in checkpoint:
@@ -327,6 +336,13 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             torch.cuda.empty_cache()
 
     for e in range(start_epoch, args.max_epoch):
+        c_temperature, a_temperature = epoch_temperatures(args, e + 1)
+        logger.log(
+            f"epoch={e + 1} "
+            f"a_topk_temperature_schedule={args.a_topk_temperature_schedule} "
+            f"c_topk_temperature={c_temperature:.6f} "
+            f"a_topk_temperature={a_temperature:.6f}"
+        )
         model.train()
         temporal_segment_active = (
             args.temporal_segment_topk and
@@ -426,7 +442,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         normalize_evidence=normalize_dual_evidence,
                     )
                 loss1 = CLAS2(logits1, text_labels, feat_lengths, device,
-                              args.c_topk_temperature, args.topk_pooling,
+                              c_temperature, args.topk_pooling,
                               args.multi_k_percentages,
                               None if ais_selection is None
                               else ais_selection.batch_k,
@@ -436,7 +452,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               else dual_c_selection.weights,
                               temporal_segment=c_temporal_segment_active)
                 loss2 = CLASM(logits2, text_labels, feat_lengths, device,
-                              args.a_topk_temperature, args.topk_pooling,
+                              a_temperature, args.topk_pooling,
                               args.multi_k_percentages,
                               None if ais_selection is None
                               else ais_selection.batch_k,
@@ -634,6 +650,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     f"loss_smooth_a={loss_smooth_a.item():.6f} "
                     f"weighted_smooth_a={weighted_smooth_a.item():.6f} "
                     f"lr={optimizer.param_groups[0]['lr']:.2e} "
+                    f"c_topk_temperature={c_temperature:.6f} "
+                    f"a_topk_temperature={a_temperature:.6f} "
                     f"{ais_text}"
                     f"{dual_text}"
                     f"peak_vram={peak_vram:.2f}GB"
@@ -650,6 +668,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     ap_best = AP 
                     checkpoint = {
                         'epoch': e,
+                        'topk_temperature_config': temperature_config(args),
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'dual_lambda_c': dual_lambda_c,
@@ -690,6 +709,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             checkpoint = {
                 'epoch': e,
                 'next_epoch': e + 1,
+                'topk_temperature_config': temperature_config(args),
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
@@ -745,6 +765,7 @@ def setup_seed(seed):
 if __name__ == '__main__':
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args = ucf_option.parser.parse_args()
+    validate_temperature_config(args)
     setup_seed(args.seed)
 
     label_map = dict({'Normal': 'normal', 'Abuse': 'abuse', 'Arrest': 'arrest', 'Arson': 'arson', 'Assault': 'assault', 'Burglary': 'burglary', 'Explosion': 'explosion', 'Fighting': 'fighting', 'RoadAccidents': 'roadAccidents', 'Robbery': 'robbery', 'Shooting': 'shooting', 'Shoplifting': 'shoplifting', 'Stealing': 'stealing', 'Vandalism': 'vandalism'})

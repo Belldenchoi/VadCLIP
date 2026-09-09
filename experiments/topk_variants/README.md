@@ -52,6 +52,13 @@ python experiments/topk_variants/train_ucf.py \
   --log-path outputs/ucf_soft.log
 ```
 
+### 2.1. Soft Top-K với nhiệt độ thay đổi
+
+Thử lịch nhiệt độ branch A từ 2.0 xuống 1.0 trong epoch 1–4, sau đó giữ 1.0;
+branch C giữ nhiệt độ cố định. Không đổi K hoặc thêm loss. Mặc định lịch tắt,
+nên các lệnh cũ giữ nguyên hành vi. Thiết kế, công thức và lệnh Kaggle nằm trong
+[`SOFT_TOPK_TEMPERATURE_DESIGN.md`](SOFT_TOPK_TEMPERATURE_DESIGN.md).
+
 ### 3. Multi-K
 
 Tính mean Top-K riêng tại bốn tỷ lệ Top-1%, Top-5%, Top-10% và Top-20%, sau

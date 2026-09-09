@@ -43,7 +43,16 @@ parser.add_argument('--multi-k-percentages', nargs='+',
 parser.add_argument('--c-topk-temperature', default=1.0, type=float,
                     help='Soft Top-K temperature for the C-branch')
 parser.add_argument('--a-topk-temperature', default=1.0, type=float,
-                    help='Soft Top-K temperature for the A-branch')
+                    help='A-branch fixed temperature, or final scheduled temperature')
+parser.add_argument('--a-topk-temperature-schedule',
+                    choices=['constant', 'linear'], default='constant',
+                    help='Opt-in A-branch temperature schedule; requires soft pooling')
+parser.add_argument('--a-topk-temperature-start', default=2.0, type=float,
+                    help='Initial A temperature for the linear schedule')
+parser.add_argument('--a-topk-temperature-start-epoch', default=1, type=int,
+                    help='1-based first epoch of the A temperature ramp')
+parser.add_argument('--a-topk-temperature-end-epoch', default=4, type=int,
+                    help='1-based epoch reaching --a-topk-temperature')
 parser.add_argument('--temporal-segment-topk', action='store_true',
                     help=('After the configured start epoch, keep original '
                           'hard Top-K in C-branch and use a class-wise best '
