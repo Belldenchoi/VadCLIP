@@ -59,6 +59,12 @@ branch C giữ nhiệt độ cố định. Không đổi K hoặc thêm loss. M�
 nên các lệnh cũ giữ nguyên hành vi. Thiết kế, công thức và lệnh Kaggle nằm trong
 [`SOFT_TOPK_TEMPERATURE_DESIGN.md`](SOFT_TOPK_TEMPERATURE_DESIGN.md).
 
+### 2.2. Soft Top-K + loss xếp hạng trên C
+
+Biến thể **Soft Top-K + loss xếp hạng trên C** được mô tả riêng tại
+[`SOFT_TOPK_RANKING_DESIGN.md`](SOFT_TOPK_RANKING_DESIGN.md), gồm công thức,
+cấu hình đối chứng và lệnh Kaggle. Loss này mặc định tắt, không thay BCE/CE.
+
 ### 3. Multi-K
 
 Tính mean Top-K riêng tại bốn tỷ lệ Top-1%, Top-5%, Top-10% và Top-20%, sau

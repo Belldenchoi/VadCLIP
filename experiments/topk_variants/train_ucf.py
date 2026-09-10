@@ -34,6 +34,10 @@ from topk_pooling import (
     video_topk_size,
 )
 from training_log import TrainingLogger
+from ranking_loss import (
+    c_pairwise_ranking, ranking_active, ranking_config,
+    validate_checkpoint_ranking, validate_ranking_config,
+)
 from temperature_schedule import (
     epoch_temperatures,
     temperature_config,
@@ -91,7 +95,8 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
           pooling='soft',
           multi_k_percentages=(1.0, 5.0, 10.0, 20.0),
           instance_k=None, c_temporal_smoothing_kernel=1,
-          selection_weights=None, temporal_segment=False):
+          selection_weights=None, temporal_segment=False,
+          return_video_scores=False):
     labels = 1 - labels[:, 0].reshape(labels.shape[0])
     labels = labels.to(device)
     logits = torch.sigmoid(logits).reshape(logits.shape[0], logits.shape[1])
@@ -132,10 +137,13 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
             instance_logits.float().clamp(1e-6, 1.0 - 1e-6),
             labels.float()
         )
+    if return_video_scores:
+        return clsloss, instance_logits.float()
     return clsloss
 
 def train(model, normal_loader, anomaly_loader, testloader, args, label_map, device):
     validate_temperature_config(args)
+    validate_ranking_config(args)
     model.to(device)
     if args.dual_k_diagnostics_only and not args.dual_k:
         raise ValueError("--dual-k-diagnostics-only requires --dual-k")
@@ -248,6 +256,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"actions={args.train_actions or 'all'} "
         f"topk_pooling={args.topk_pooling} "
         f"topk_temperature_config={temperature_config(args)} "
+        f"c_ranking_config={ranking_config(args)} "
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
         f"dual_k={args.dual_k} "
@@ -297,6 +306,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             args.checkpoint_path, map_location=device, weights_only=False
         )
         validate_checkpoint_temperature(args, checkpoint)
+        validate_checkpoint_ranking(args, checkpoint)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if 'scheduler_state_dict' in checkpoint:
@@ -337,12 +347,15 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
 
     for e in range(start_epoch, args.max_epoch):
         c_temperature, a_temperature = epoch_temperatures(args, e + 1)
+        c_ranking_active = ranking_active(args, e + 1)
         logger.log(
             f"epoch={e + 1} "
             f"a_topk_temperature_schedule={args.a_topk_temperature_schedule} "
             f"c_topk_temperature={c_temperature:.6f} "
             f"a_topk_temperature={a_temperature:.6f}"
         )
+        if args.c_ranking_loss:
+            logger.log(f"epoch={e + 1} c_ranking_active={c_ranking_active}")
         model.train()
         temporal_segment_active = (
             args.temporal_segment_topk and
@@ -382,6 +395,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         loss_total1 = 0
         loss_total2 = 0
         loss_total3 = 0
+        loss_total_ranking = 0.0
+        loss_total_weighted_ranking = 0.0
         loss_total_smooth_c = 0
         loss_total_smooth_a = 0
         loss_total_weighted_smooth_c = 0
@@ -450,7 +465,18 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               None if (dual_c_selection is None or
                                        args.dual_k_diagnostics_only)
                               else dual_c_selection.weights,
-                              temporal_segment=c_temporal_segment_active)
+                              temporal_segment=c_temporal_segment_active,
+                              return_video_scores=c_ranking_active)
+                loss_ranking = torch.zeros((), device=device, dtype=torch.float32)
+                weighted_ranking = torch.zeros((), device=device, dtype=torch.float32)
+                ranking_stats = None
+                if c_ranking_active:
+                    loss1, c_video_scores = loss1
+                    loss_ranking, ranking_stats = c_pairwise_ranking(
+                        c_video_scores, 1 - text_labels[:, 0],
+                        margin=args.c_ranking_margin,
+                    )
+                    weighted_ranking = args.c_ranking_weight * loss_ranking
                 loss2 = CLASM(logits2, text_labels, feat_lengths, device,
                               a_temperature, args.topk_pooling,
                               args.multi_k_percentages,
@@ -503,6 +529,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     loss1 + loss2 + loss3
                     + weighted_smooth_c + weighted_smooth_a
                 )
+                if c_ranking_active:
+                    loss = loss + weighted_ranking
                 dual_loss_c = torch.zeros((), device=device)
                 dual_loss_a = torch.zeros((), device=device)
                 if args.dual_k:
@@ -535,6 +563,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             loss_total1 += loss1.item()
             loss_total2 += loss2.item()
             loss_total3 += loss3.item()
+            loss_total_ranking += loss_ranking.item()
+            loss_total_weighted_ranking += weighted_ranking.item()
             loss_total_smooth_c += loss_smooth_c.item()
             loss_total_smooth_a += loss_smooth_a.item()
             loss_total_weighted_smooth_c += weighted_smooth_c.item()
@@ -641,6 +671,17 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         f"dual_u_a_target_std="
                         f"{dual_a_stats['u_std'].item():.4f} "
                     )
+                ranking_text = ''
+                if args.c_ranking_loss:
+                    ranking_text = (
+                        f"loss_ranking_c={loss_ranking.item():.6f} "
+                        f"weighted_ranking_c={weighted_ranking.item():.6f} "
+                    )
+                    if ranking_stats is not None:
+                        ranking_text += ' '.join(
+                            f"ranking_c_{key}={value:.6f}"
+                            for key, value in ranking_stats.items()
+                        ) + ' '
                 logger.log(
                     f"epoch={e + 1}/{args.max_epoch} batch={i + 1}/{num_batches} "
                     f"loss={loss.item():.4f} loss1={loss1.item():.4f} "
@@ -654,6 +695,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     f"a_topk_temperature={a_temperature:.6f} "
                     f"{ais_text}"
                     f"{dual_text}"
+                    f"{ranking_text}"
                     f"peak_vram={peak_vram:.2f}GB"
                 )
             step += i * normal_loader.batch_size * 2
@@ -669,6 +711,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     checkpoint = {
                         'epoch': e,
                         'topk_temperature_config': temperature_config(args),
+                        'c_ranking_config': ranking_config(args),
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'dual_lambda_c': dual_lambda_c,
@@ -692,6 +735,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             f"avg_loss1={loss_total1 / num_batches:.4f} "
             f"avg_loss2={loss_total2 / num_batches:.4f} "
             f"avg_loss3={loss_total3 / num_batches:.4f} "
+            f"avg_loss_ranking_c={loss_total_ranking / num_batches:.6f} "
+            f"avg_weighted_ranking_c={loss_total_weighted_ranking / num_batches:.6f} "
             f"avg_loss_smooth_c="
             f"{loss_total_smooth_c / num_batches:.6f} "
             f"avg_weighted_smooth_c="
@@ -710,6 +755,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 'epoch': e,
                 'next_epoch': e + 1,
                 'topk_temperature_config': temperature_config(args),
+                'c_ranking_config': ranking_config(args),
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
@@ -766,6 +812,7 @@ if __name__ == '__main__':
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args = ucf_option.parser.parse_args()
     validate_temperature_config(args)
+    validate_ranking_config(args)
     setup_seed(args.seed)
 
     label_map = dict({'Normal': 'normal', 'Abuse': 'abuse', 'Arrest': 'arrest', 'Arson': 'arson', 'Assault': 'assault', 'Burglary': 'burglary', 'Explosion': 'explosion', 'Fighting': 'fighting', 'RoadAccidents': 'roadAccidents', 'Robbery': 'robbery', 'Shooting': 'shooting', 'Shoplifting': 'shoplifting', 'Stealing': 'stealing', 'Vandalism': 'vandalism'})

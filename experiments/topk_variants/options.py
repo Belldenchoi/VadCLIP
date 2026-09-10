@@ -53,6 +53,12 @@ parser.add_argument('--a-topk-temperature-start-epoch', default=1, type=int,
                     help='1-based first epoch of the A temperature ramp')
 parser.add_argument('--a-topk-temperature-end-epoch', default=4, type=int,
                     help='1-based epoch reaching --a-topk-temperature')
+parser.add_argument('--c-ranking-loss', action='store_true',
+                    help='Add all-pairs video ranking to C BCE; requires isolated soft pooling')
+parser.add_argument('--c-ranking-margin', default=0.2, type=float)
+parser.add_argument('--c-ranking-weight', default=0.1, type=float)
+parser.add_argument('--c-ranking-start-epoch', default=1, type=int,
+                    help='1-based first epoch for C ranking loss')
 parser.add_argument('--temporal-segment-topk', action='store_true',
                     help=('After the configured start epoch, keep original '
                           'hard Top-K in C-branch and use a class-wise best '
