@@ -1,7 +1,12 @@
 # VadCLIP Top-K variants
 
-Folder này chứa toàn bộ code thí nghiệm Top-K tách biệt khỏi baseline. Không
-file nào trong `src/` cần chỉnh sửa để chạy các phương pháp ở đây.
+Folder này chứa code thí nghiệm Top-K. PCA dùng thêm tùy chọn
+`return_visual_features` trong `src/model.py`; lời gọi mặc định vẫn trả ba
+output và giữ đường tính của baseline.
+
+Thí nghiệm mới: [snippet ranking và PCA](../../reports/topk_variants/THIET_KE_SNIPPET_RANKING_PCA_2026-10-07.md),
+[lệnh chạy ghép seed](../../reports/topk_variants/LENH_KAGGLE_SNIPPET_RANKING_PCA.md).
+Hai loss mặc định tắt; chưa có kết quả GPU cho các cấu hình mới.
 
 ## Cấu trúc
 
@@ -14,14 +19,15 @@ experiments/topk_variants/
 ├── topk_pooling.py                # mean/soft/multi-K/temporal segment
 ├── adaptive_instance_selection.py # AIS tách khỏi Soft Top-K
 ├── temporal_smoothness.py         # smoothness loss cho C/A probability
+├── snippet_pca_loss.py            # snippet ranking, fit PCA Normal train, auxiliary loss
 ├── detection_map.py               # mAP có thể lọc action
 ├── training_log.py                # log ra terminal và file
 ├── inspect_topk_weights.py        # xem score/index/weight Top-K
 └── tests/                         # unit tests riêng
 ```
 
-Model, temporal adapter và CLIP vẫn được dùng trực tiếp từ `src/model.py` của
-baseline gốc. Folder này không ghi đè hay monkey-patch code trong `src/`.
+Model, temporal adapter và CLIP vẫn được dùng trực tiếp từ `src/model.py`.
+PCA lấy representation từ tùy chọn trả thêm feature, không thêm tham số model.
 
 ## Các cấu hình so sánh
 

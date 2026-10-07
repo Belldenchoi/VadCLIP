@@ -199,7 +199,7 @@ class CLIPVAD(nn.Module):
 
         return text_features
 
-    def forward(self, visual, padding_mask, text, lengths):
+    def forward(self, visual, padding_mask, text, lengths, return_visual_features=False):
         visual_features = self.encode_video(visual, padding_mask, lengths)
         logits1 = self.classifier(visual_features + self.mlp2(visual_features))
 
@@ -220,5 +220,6 @@ class CLIPVAD(nn.Module):
         text_features_norm = text_features_norm.permute(0, 2, 1)
         logits2 = visual_features_norm @ text_features_norm.type(visual_features_norm.dtype) / 0.07
 
+        if return_visual_features:
+            return text_features_ori, logits1, logits2, visual_features
         return text_features_ori, logits1, logits2
-    

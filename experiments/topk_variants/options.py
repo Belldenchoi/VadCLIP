@@ -1,6 +1,22 @@
 import argparse
 
 parser = argparse.ArgumentParser(description='VadCLIP')
+
+# Independent of the older pooled-score --c-ranking-loss ablation.
+parser.add_argument('--snippet-ranking-loss', action='store_true')
+parser.add_argument('--snippet-ranking-mode', choices=['hinge', 'softplus'], default='hinge')
+parser.add_argument('--snippet-ranking-margin', type=float, default=0.1)
+parser.add_argument('--snippet-ranking-weight', type=float, default=0.1)
+parser.add_argument('--snippet-ranking-temperature', type=float, default=0.05)
+parser.add_argument('--snippet-ranking-start-epoch', type=int, default=3)
+parser.add_argument('--pca-loss', action='store_true')
+parser.add_argument('--pca-weight', type=float, default=0.01)
+parser.add_argument('--pca-margin', type=float, default=0.1)
+parser.add_argument('--pca-rank', type=int, default=64)
+parser.add_argument('--pca-start-epoch', type=int, default=3)
+parser.add_argument('--pca-fit-videos', type=int, default=128)
+parser.add_argument('--pca-fit-snippets', type=int, default=32)
+parser.add_argument('--pca-fit-seed', type=int, default=0)
 parser.add_argument('--seed', default=234, type=int)
 
 parser.add_argument('--embed-dim', default=512, type=int)

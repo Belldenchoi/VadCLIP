@@ -34,6 +34,7 @@ from topk_pooling import (
     video_topk_size,
 )
 from training_log import TrainingLogger
+from snippet_pca_loss import SnippetAuxiliaryLoss, validate_snippet_config
 from ranking_loss import (
     c_pairwise_ranking, ranking_active, ranking_config,
     validate_checkpoint_ranking, validate_ranking_config,
@@ -142,6 +143,13 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
     return clsloss
 
 def train(model, normal_loader, anomaly_loader, testloader, args, label_map, device):
+    auxiliary = SnippetAuxiliaryLoss(args)
+    if args.snippet_ranking_loss and not args.use_checkpoint:
+        for output in (args.checkpoint_path, args.model_path, args.log_path):
+            if output and Path(output).exists():
+                raise ValueError(f'New snippet/PCA run would overwrite {output}; choose new output paths')
+    if args.pca_loss and getattr(model, 'uses_fixed_prototypes', False):
+        raise ValueError('PCA ablation is currently supported only by the standard CLIPVAD model')
     validate_temperature_config(args)
     validate_ranking_config(args)
     model.to(device)
@@ -251,12 +259,13 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
     if use_amp:
         torch.cuda.reset_peak_memory_stats()
     logger.log(
-        f"device={device} amp={use_amp} epochs={args.max_epoch} "
+        f"device={device} amp={use_amp} epochs={args.max_epoch} seed={args.seed} "
         f"batch_size={args.batch_size} accumulation={accumulation_steps} "
         f"actions={args.train_actions or 'all'} "
         f"topk_pooling={args.topk_pooling} "
         f"topk_temperature_config={temperature_config(args)} "
         f"c_ranking_config={ranking_config(args)} "
+        f"snippet_auxiliary_config={auxiliary.config} "
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
         f"dual_k={args.dual_k} "
@@ -307,6 +316,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         )
         validate_checkpoint_temperature(args, checkpoint)
         validate_checkpoint_ranking(args, checkpoint)
+        auxiliary.restore(checkpoint)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if 'scheduler_state_dict' in checkpoint:
@@ -357,6 +367,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         if args.c_ranking_loss:
             logger.log(f"epoch={e + 1} c_ranking_active={c_ranking_active}")
         model.train()
+        auxiliary.begin_epoch(e + 1, model, normal_loader.dataset, device, logger)
+        auxiliary_totals = {}
         temporal_segment_active = (
             args.temporal_segment_topk and
             e + 1 >= args.temporal_segment_start_epoch
@@ -421,9 +433,16 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
 
             with torch.autocast(device_type=device, dtype=torch.float16,
                                 enabled=use_amp):
-                text_features, logits1, logits2 = model(
-                    visual_features, None, prompt_text, feat_lengths
-                )
+                learned_features = None
+                if auxiliary.pca_active(e + 1):
+                    text_features, logits1, logits2, learned_features = model(
+                        visual_features, None, prompt_text, feat_lengths,
+                        return_visual_features=True,
+                    )
+                else:
+                    text_features, logits1, logits2 = model(
+                        visual_features, None, prompt_text, feat_lengths
+                    )
                 ais_selection = None
                 dual_c_selection = None
                 dual_a_selection = None
@@ -531,6 +550,13 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 )
                 if c_ranking_active:
                     loss = loss + weighted_ranking
+                auxiliary_metrics = {}
+                if auxiliary.active(e + 1):
+                    auxiliary_loss, auxiliary_metrics = auxiliary(
+                        logits1, learned_features, feat_lengths,
+                        1 - text_labels[:, 0], e + 1,
+                    )
+                    loss = loss + auxiliary_loss
                 dual_loss_c = torch.zeros((), device=device)
                 dual_loss_a = torch.zeros((), device=device)
                 if args.dual_k:
@@ -561,6 +587,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 )
 
             loss_total1 += loss1.item()
+            for key, value in auxiliary_metrics.items():
+                auxiliary_totals[key] = auxiliary_totals.get(key, 0.0) + value
             loss_total2 += loss2.item()
             loss_total3 += loss3.item()
             loss_total_ranking += loss_ranking.item()
@@ -672,6 +700,9 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         f"{dual_a_stats['u_std'].item():.4f} "
                     )
                 ranking_text = ''
+                auxiliary_text = ''.join(
+                    f'{key}={value:.6f} ' for key, value in auxiliary_metrics.items()
+                )
                 if args.c_ranking_loss:
                     ranking_text = (
                         f"loss_ranking_c={loss_ranking.item():.6f} "
@@ -696,6 +727,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     f"{ais_text}"
                     f"{dual_text}"
                     f"{ranking_text}"
+                    f"{auxiliary_text}"
                     f"peak_vram={peak_vram:.2f}GB"
                 )
             step += i * normal_loader.batch_size * 2
@@ -712,6 +744,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         'epoch': e,
                         'topk_temperature_config': temperature_config(args),
                         'c_ranking_config': ranking_config(args),
+                        'snippet_auxiliary': auxiliary.state_dict(),
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'dual_lambda_c': dual_lambda_c,
@@ -730,8 +763,13 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 f"ais_confident_mean="
                 f"{ais_confident_count_total / ais_pair_count:.3f} "
             )
+        auxiliary_summary = ''.join(
+            f'avg_{key}={value / num_batches:.6f} '
+            for key, value in auxiliary_totals.items()
+        )
         logger.log(
             f"epoch_summary={e + 1}/{args.max_epoch} batches={num_batches} "
+            f"{auxiliary_summary}"
             f"avg_loss1={loss_total1 / num_batches:.4f} "
             f"avg_loss2={loss_total2 / num_batches:.4f} "
             f"avg_loss3={loss_total3 / num_batches:.4f} "
@@ -756,6 +794,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 'next_epoch': e + 1,
                 'topk_temperature_config': temperature_config(args),
                 'c_ranking_config': ranking_config(args),
+                'snippet_auxiliary': auxiliary.state_dict(),
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
@@ -813,6 +852,7 @@ if __name__ == '__main__':
     args = ucf_option.parser.parse_args()
     validate_temperature_config(args)
     validate_ranking_config(args)
+    validate_snippet_config(args)
     setup_seed(args.seed)
 
     label_map = dict({'Normal': 'normal', 'Abuse': 'abuse', 'Arrest': 'arrest', 'Arson': 'arson', 'Assault': 'assault', 'Burglary': 'burglary', 'Explosion': 'explosion', 'Fighting': 'fighting', 'RoadAccidents': 'roadAccidents', 'Robbery': 'robbery', 'Shooting': 'shooting', 'Shoplifting': 'shoplifting', 'Stealing': 'stealing', 'Vandalism': 'vandalism'})
