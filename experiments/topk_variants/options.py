@@ -10,6 +10,9 @@ parser.add_argument('--snippet-ranking-weight', type=float, default=0.1)
 parser.add_argument('--snippet-ranking-temperature', type=float, default=0.05)
 parser.add_argument('--snippet-ranking-start-epoch', type=int, default=3)
 parser.add_argument('--pca-loss', action='store_true')
+parser.add_argument('--c-pca-loss', action='store_true',
+                    help='PCA on C features with no PCA gradient to the shared '
+                         'encoder; retain the temporal-A reference configuration')
 parser.add_argument('--pca-weight', type=float, default=0.01)
 parser.add_argument('--pca-margin', type=float, default=0.1)
 parser.add_argument('--pca-rank', type=int, default=64)

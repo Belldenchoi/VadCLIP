@@ -1,19 +1,74 @@
 # VadCLIP Top-K variants
 
-Folder này chứa code thí nghiệm Top-K. PCA dùng thêm tùy chọn
-`return_visual_features` trong `src/model.py`; lời gọi mặc định vẫn trả ba
-output và giữ đường tính của baseline.
+Folder này chứa code thí nghiệm Top-K. PCA cũ dùng `return_visual_features`
+(feature chung); PCA riêng ở C dùng `return_c_features` trong `src/model.py`.
+Lời gọi mặc định vẫn trả ba output và giữ đường tính của baseline.
 
-Thí nghiệm mới: [snippet ranking và PCA](../../reports/topk_variants/THIET_KE_SNIPPET_RANKING_PCA_2026-10-07.md),
-[lệnh chạy ghép seed](../../reports/topk_variants/LENH_KAGGLE_SNIPPET_RANKING_PCA.md).
-Hai loss mặc định tắt; chưa có kết quả GPU cho các cấu hình mới.
+Báo cáo và thiết kế nằm trong `reports/topk_variants/`, log trong `logs/` ở máy
+local; các thư mục này được Git bỏ qua. Lệnh chạy PCA C nằm ngay dưới đây.
+
+Thí nghiệm hiện tại: PCA ở C, giữ Temporal-A.
+`--c-pca-loss` áp PCA lên `h + mlp2(h)`, chặn gradient PCA về encoder chung;
+PCA chỉ cập nhật `mlp2`. A giữ Conv1D k3 + segment từ epoch 1 + TV A=0,05.
+Cấu hình chính chạy PCA độc lập, tắt snippet ranking; chưa có AUC của CP.
+A vẫn có thể thay đổi gián tiếp qua visual prompt sử dụng score C.
+
+Thí nghiệm cũ S/SP giữ các cờ `--snippet-ranking-loss` / `--pca-loss` để đối chiếu.
+Các loss mặc định tắt. Cấu hình CLI dùng trong test nằm ở
+`tests/fixtures/training_commands.json`; tests không phụ thuộc báo cáo local.
+
+## Chạy PCA C trên Kaggle
+
+Chạy R và CP cùng seed, cùng GPU và cùng feature/CSV. Các lệnh dưới dùng seed
+234; để ghép ba seed, thay mọi `234` bằng `3407`, rồi `2026`, cả seed lẫn
+output. Nếu chạy lại, đổi `t4_pca_c_r1` thành tên khác. Giữ AMP tắt,
+accumulation 1, không resume và không thêm snippet ranking vào CP chính.
+
+### R — tham chiếu Temporal-A
+
+```bash
+!cd /kaggle/working/VadCLIP && \
+python -u experiments/topk_variants/train_ucf.py \
+  --train-list /kaggle/working/ucf_CLIP_rgb_kaggle.csv \
+  --test-list /kaggle/working/ucf_CLIP_rgbtest_kaggle.csv \
+  --seed 234 --batch-size 64 --max-epoch 10 \
+  --topk-pooling mean \
+  --temporal-segment-topk --temporal-segment-start-epoch 1 \
+  --temporal-smoothing-kernel 3 \
+  --temporal-smoothness-branch a --temporal-smoothness-start-epoch 1 \
+  --a-temporal-smoothness-weight 0.05 \
+  --model-path outputs/t4_pca_c_r1/R_seed234/model.pth \
+  --checkpoint-path outputs/t4_pca_c_r1/R_seed234/checkpoint.pth \
+  --log-path outputs/t4_pca_c_r1/R_seed234/train.log
+```
+
+### CP — R + PCA ở C
+
+```bash
+!cd /kaggle/working/VadCLIP && \
+python -u experiments/topk_variants/train_ucf.py \
+  --train-list /kaggle/working/ucf_CLIP_rgb_kaggle.csv \
+  --test-list /kaggle/working/ucf_CLIP_rgbtest_kaggle.csv \
+  --seed 234 --batch-size 64 --max-epoch 10 \
+  --topk-pooling mean \
+  --temporal-segment-topk --temporal-segment-start-epoch 1 \
+  --temporal-smoothing-kernel 3 \
+  --temporal-smoothness-branch a --temporal-smoothness-start-epoch 1 \
+  --a-temporal-smoothness-weight 0.05 \
+  --c-pca-loss --pca-weight 0.01 --pca-margin 0.1 \
+  --pca-rank 64 --pca-start-epoch 3 \
+  --pca-fit-videos 128 --pca-fit-snippets 32 --pca-fit-seed 0 \
+  --model-path outputs/t4_pca_c_r1/CP_seed234/model.pth \
+  --checkpoint-path outputs/t4_pca_c_r1/CP_seed234/checkpoint.pth \
+  --log-path outputs/t4_pca_c_r1/CP_seed234/train.log
+```
 
 ## Cấu trúc
 
 ```text
 experiments/topk_variants/
 ├── train_ucf.py                   # train các Top-K và temporal regularizer
-├── test_ucf.py                    # đánh giá, optional temporal post-process
+├── test_ucf.py                    # đánh giá raw scores theo evaluator gốc
 ├── options.py                     # CLI riêng của variants
 ├── dataset_variants.py            # lọc action/smoke-test riêng
 ├── topk_pooling.py                # mean/soft/multi-K/temporal segment
@@ -28,6 +83,10 @@ experiments/topk_variants/
 
 Model, temporal adapter và CLIP vẫn được dùng trực tiếp từ `src/model.py`.
 PCA lấy representation từ tùy chọn trả thêm feature, không thêm tham số model.
+
+Thiết kế ngắn, công thức chi tiết và thứ tự ablation cho Conv1D, Temporal
+Segment Top-K và L1 Temporal Smoothness nằm trong
+`reports/topk_variants/TEMPORAL_SMOOTHING_DESIGN.md` ở máy local.
 
 ## Các cấu hình so sánh
 
@@ -63,12 +122,12 @@ python experiments/topk_variants/train_ucf.py \
 Thử lịch nhiệt độ branch A từ 2.0 xuống 1.0 trong epoch 1–4, sau đó giữ 1.0;
 branch C giữ nhiệt độ cố định. Không đổi K hoặc thêm loss. Mặc định lịch tắt,
 nên các lệnh cũ giữ nguyên hành vi. Thiết kế, công thức và lệnh Kaggle nằm trong
-[`SOFT_TOPK_TEMPERATURE_DESIGN.md`](SOFT_TOPK_TEMPERATURE_DESIGN.md).
+`reports/topk_variants/SOFT_TOPK_TEMPERATURE_DESIGN.md` ở máy local.
 
 ### 2.2. Soft Top-K + loss xếp hạng trên C
 
 Biến thể **Soft Top-K + loss xếp hạng trên C** được mô tả riêng tại
-[`SOFT_TOPK_RANKING_DESIGN.md`](SOFT_TOPK_RANKING_DESIGN.md), gồm công thức,
+`reports/topk_variants/SOFT_TOPK_RANKING_DESIGN.md` ở máy local, gồm công thức,
 cấu hình đối chứng và lệnh Kaggle. Loss này mặc định tắt, không thay BCE/CE.
 
 ### 3. Multi-K

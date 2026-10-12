@@ -1,5 +1,5 @@
 import ast
-import shlex
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -30,12 +30,10 @@ def scheduled_args(*extra):
 
 
 class TemperatureScheduleTests(unittest.TestCase):
-    def test_documented_kaggle_arguments_parse_and_enable_schedule(self):
-        design = (VARIANT_ROOT / 'SOFT_TOPK_TEMPERATURE_DESIGN.md').read_text(
-            encoding='utf-8')
-        command = design.split('python experiments/topk_variants/train_ucf.py', 1)[1]
-        command = command.split('```', 1)[0].replace('\\\n', ' ')
-        args = parser.parse_args(shlex.split(command))
+    def test_example_kaggle_arguments_parse_and_enable_schedule(self):
+        command = json.loads((VARIANT_ROOT / 'tests/fixtures/training_commands.json').read_text(
+            encoding='utf-8'))['a_temperature_schedule']
+        args = parser.parse_args(command)
         validate_temperature_config(args)
         self.assertEqual((args.seed, args.batch_size, args.max_epoch), (234, 64, 10))
         self.assertEqual(epoch_temperatures(args, 1), (1.0, 2.0))

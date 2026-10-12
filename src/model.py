@@ -199,9 +199,24 @@ class CLIPVAD(nn.Module):
 
         return text_features
 
-    def forward(self, visual, padding_mask, text, lengths, return_visual_features=False):
+    def encode_c_features(self, visual_features, detach_shared=False, lengths=None):
+        """Classifier-C input; optionally stop auxiliary gradients at the trunk."""
+        if detach_shared:
+            visual_features = visual_features.detach()
+            if lengths is not None:
+                valid = (torch.arange(visual_features.shape[1], device=visual_features.device)[None, :]
+                         < lengths[:, None])
+                # Mask before mlp2 so invalid input * zero gradient cannot
+                # contaminate C-head weight gradients with padded NaNs.
+                visual_features = visual_features.masked_fill(~valid[..., None], 0)
+        return visual_features + self.mlp2(visual_features)
+
+    def forward(self, visual, padding_mask, text, lengths,
+                return_visual_features=False, return_c_features=False):
+        if return_visual_features and return_c_features:
+            raise ValueError('Choose shared or C auxiliary features, not both')
         visual_features = self.encode_video(visual, padding_mask, lengths)
-        logits1 = self.classifier(visual_features + self.mlp2(visual_features))
+        logits1 = self.classifier(self.encode_c_features(visual_features))
 
         text_features_ori = self.encode_textprompt(text)
 
@@ -220,6 +235,11 @@ class CLIPVAD(nn.Module):
         text_features_norm = text_features_norm.permute(0, 2, 1)
         logits2 = visual_features_norm @ text_features_norm.type(visual_features_norm.dtype) / 0.07
 
+        if return_c_features:
+            # Same feature values as the classifier input, but PCA only trains
+            # mlp2. Do not detach the ordinary C/A forward or their base losses.
+            c_features = self.encode_c_features(visual_features, detach_shared=True, lengths=lengths)
+            return text_features_ori, logits1, logits2, c_features
         if return_visual_features:
             return text_features_ori, logits1, logits2, visual_features
         return text_features_ori, logits1, logits2

@@ -1,3 +1,27 @@
+# Local reports and generated documents
+reports/
+*.doc
+*.docx
+*.pdf
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+DESIGN.md
+*_DESIGN.md
+RESULTS.md
+TEMPORAL_SEGMENT_TOPK.md
+dual_k_vadclip_*.md
+BAO_CAO*.md
+BANG_*.md
+KET_QUA*.md
+PHAN_TICH*.md
+PHAT_TRIEN*.md
+THIET_KE*.md
+LENH_KAGGLE*.md
+/tools/report_helpers/
+/tools/topk_report_*/
+
 # Runtime and training logs
 /*.txt
 *.log
@@ -7,3 +31,4 @@ logs/
 runs/
 wandb/
 events.out.tfevents*
+outputs/

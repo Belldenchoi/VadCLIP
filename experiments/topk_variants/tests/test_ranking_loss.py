@@ -1,6 +1,6 @@
 import ast
+import json
 from pathlib import Path
-import shlex
 import sys
 import unittest
 
@@ -113,11 +113,10 @@ class RankingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_checkpoint_ranking(parser.parse_args([]), ckpt)
 
-    def test_documented_command_parses(self):
-        doc = (ROOT / 'SOFT_TOPK_RANKING_DESIGN.md').read_text(encoding='utf-8')
-        command = doc.split('python experiments/topk_variants/train_ucf.py', 1)[1]
-        command = command.split('```', 1)[0].replace('\\\n', ' ')
-        args = parser.parse_args(shlex.split(command))
+    def test_example_command_parses(self):
+        command = json.loads((ROOT / 'tests/fixtures/training_commands.json').read_text(
+            encoding='utf-8'))['c_video_ranking']
+        args = parser.parse_args(command)
         validate_ranking_config(args)
         self.assertTrue(args.c_ranking_loss)
         self.assertEqual((args.seed, args.batch_size, args.max_epoch), (234, 64, 10))

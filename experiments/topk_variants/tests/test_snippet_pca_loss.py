@@ -1,9 +1,9 @@
 import ast
 import contextlib
 import io
+import json
 from pathlib import Path
 import random
-import shlex
 import sys
 import tempfile
 import unittest
@@ -32,6 +32,14 @@ from training_log import TrainingLogger
 
 def args_for(*flags):
     return parser.parse_args(['--snippet-ranking-loss', *flags])
+
+
+def c_args_for(*flags):
+    return parser.parse_args([
+        '--c-pca-loss', '--temporal-segment-topk',
+        '--temporal-segment-start-epoch', '1', '--temporal-smoothing-kernel', '3',
+        '--temporal-smoothness-branch', 'a', '--temporal-smoothness-start-epoch', '1',
+        '--a-temporal-smoothness-weight', '0.05', *flags])
 
 
 class SnippetRankingTests(unittest.TestCase):
@@ -165,6 +173,68 @@ class PCATests(unittest.TestCase):
 
 
 class ConfigTests(unittest.TestCase):
+    def test_c_pca_command_catalog_is_paired_and_has_distinct_outputs(self):
+        commands = json.loads((ROOT / 'tests/fixtures/training_commands.json').read_text(encoding='utf-8'))['c_pca']
+        self.assertEqual(len(commands), 2)
+        paths = set()
+        for index, command in enumerate(commands.values()):
+            for seed in (234, 3407, 2026):
+                args = parser.parse_args([arg.replace('234', str(seed)) for arg in command])
+                validate_snippet_config(args)
+                validate_ranking_config(args)
+                validate_temperature_config(args)
+                self.assertEqual(args.c_pca_loss, index == 1)
+                self.assertFalse(args.snippet_ranking_loss or args.pca_loss)
+                self.assertFalse(args.amp or args.skip_eval or args.use_checkpoint)
+                self.assertEqual((args.seed, args.batch_size, args.max_epoch), (seed, 64, 10))
+                self.assertTrue(args.temporal_segment_topk)
+                self.assertEqual((args.temporal_smoothing_kernel, args.temporal_smoothness_branch,
+                                  args.a_temporal_smoothness_weight), (3, 'a', .05))
+                for name in ('model_path', 'checkpoint_path', 'log_path'):
+                    value = getattr(args, name)
+                    self.assertNotIn(value, paths)
+                    paths.add(value)
+
+    def test_c_pca_is_independent_and_retains_the_temporal_a_reference(self):
+        args = c_args_for()
+        auxiliary = SnippetAuxiliaryLoss(args)
+        self.assertFalse(args.snippet_ranking_loss)
+        self.assertFalse(auxiliary.active(2))
+        self.assertTrue(auxiliary.active(3))
+        self.assertFalse(auxiliary.snippet_active(3))
+        self.assertEqual(auxiliary.forward_kwargs(), {'return_c_features': True})
+        self.assertEqual(auxiliary.config['pca_gradient_scope'], 'mlp2_only')
+        for name, value in [('temporal_segment_topk', False),
+                            ('temporal_segment_start_epoch', 2),
+                            ('temporal_smoothing_kernel', 1),
+                            ('temporal_smoothness_branch', 'none'),
+                            ('temporal_smoothness_start_epoch', 2),
+                            ('a_temporal_smoothness_weight', .01)]:
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'temporal-A'):
+                invalid = c_args_for()
+                setattr(invalid, name, value)
+                validate_snippet_config(invalid)
+        for flags in [('--pca-loss',), ('--pca-start-epoch', '0'),
+                      ('--pca-weight', 'nan'), ('--pca-rank', '512'),
+                      ('--dual-k',), ('--snippet-ranking-loss', '--pca-start-epoch', '2')]:
+            with self.subTest(flags=flags), self.assertRaises(ValueError):
+                validate_snippet_config(c_args_for(*flags))
+
+    def test_legacy_shared_pca_config_and_c_pca_checkpoints_are_distinct(self):
+        legacy = SnippetAuxiliaryLoss(args_for('--pca-loss'))
+        current = SnippetAuxiliaryLoss(c_args_for())
+        self.assertEqual(legacy.config['version'], 1)
+        self.assertNotIn('c_pca_loss', legacy.config)
+        self.assertNotIn('pca_feature_source', legacy.config)
+        self.assertEqual(current.config['version'], 2)
+        for target, checkpoint in [(current, legacy.state_dict()), (legacy, current.state_dict())]:
+            with self.assertRaisesRegex(ValueError, 'configuration differs'):
+                target.restore({'epoch': 1, 'snippet_auxiliary': checkpoint})
+        forged = current.state_dict()
+        forged['pca'] = {'metadata': {}}
+        with self.assertRaisesRegex(ValueError, 'C branch'):
+            current.restore({'epoch': 2, 'snippet_auxiliary': forged})
+
     def test_disabled_warmup_conflicts_and_resume(self):
         disabled = SnippetAuxiliaryLoss(parser.parse_args([]))
         self.assertFalse(disabled.active(100))
@@ -191,14 +261,12 @@ class ConfigTests(unittest.TestCase):
                                          '--temporal-smoothness-branch', 'a'))
 
     def test_command_catalog(self):
-        doc = (ROOT.parents[1] / 'reports/topk_variants/LENH_KAGGLE_SNIPPET_RANKING_PCA.md').read_text(encoding='utf-8')
-        commands = doc.split('python -u experiments/topk_variants/train_ucf.py')[1:]
+        commands = json.loads((ROOT / 'tests/fixtures/training_commands.json').read_text(encoding='utf-8'))['legacy_snippet']
         self.assertEqual(len(commands), 3)
         paths = set()
-        for body in commands:
-            command = body.split('```')[0].replace('\\\n', ' ')
+        for command in commands.values():
             for seed in (234, 3407, 2026):
-                args = parser.parse_args(shlex.split(command.replace('234', str(seed))))
+                args = parser.parse_args([arg.replace('234', str(seed)) for arg in command])
                 validate_snippet_config(args)
                 validate_ranking_config(args)
                 validate_temperature_config(args)
@@ -210,20 +278,23 @@ class ConfigTests(unittest.TestCase):
 
 # Exercise the real model forward and trainer without importing/downloading CLIP.
 model_ast = ast.parse((ROOT.parents[1] / 'src/model.py').read_text(encoding='utf-8'))
-forward_ast = next(n for c in model_ast.body if isinstance(c, ast.ClassDef) and c.name == 'CLIPVAD'
-                   for n in c.body if isinstance(n, ast.FunctionDef) and n.name == 'forward')
-forward_env = {}
-exec(compile(ast.Module(body=[forward_ast], type_ignores=[]), 'model.py', 'exec'), forward_env)
+forward_ast = [n for c in model_ast.body if isinstance(c, ast.ClassDef) and c.name == 'CLIPVAD'
+               for n in c.body if isinstance(n, ast.FunctionDef)
+               and n.name in ('forward', 'encode_c_features')]
+forward_env = {'torch': torch}
+exec(compile(ast.Module(body=forward_ast, type_ignores=[]), 'model.py', 'exec'), forward_env)
 
 
 class ToyModel(torch.nn.Module):
     forward = forward_env['forward']
+    encode_c_features = forward_env['encode_c_features']
 
     def __init__(self):
         super().__init__()
         self.encoder = torch.nn.Linear(4, 4)
         self.classifier = torch.nn.Linear(4, 1)
-        self.mlp1, self.mlp2 = torch.nn.Identity(), torch.nn.Identity()
+        self.mlp1 = torch.nn.Linear(4, 4)
+        self.mlp2 = torch.nn.Linear(4, 4)
         self.texts = torch.nn.Parameter(torch.randn(2, 4))
 
     def encode_video(self, visual, padding_mask, lengths):
@@ -285,13 +356,134 @@ class TrainerIntegrationTests(unittest.TestCase):
             if output is base: original = gradient
             else: torch.testing.assert_close(original, gradient, rtol=0, atol=0)
 
+    def test_c_feature_return_preserves_both_scores_and_a_training_gradients(self):
+        torch.manual_seed(12)
+        model = ToyModel()
+        x, lengths = torch.randn(2, 17, 4), torch.tensor([17, 17])
+        base = model(x, None, [], lengths)
+        extended = model(x, None, [], lengths, return_c_features=True)
+        for before, after in zip(base, extended[:3]):
+            torch.testing.assert_close(before, after, rtol=0, atol=0)
+        h = model.encode_video(x, None, lengths)
+        torch.testing.assert_close(extended[3], h + model.mlp2(h), rtol=0, atol=0)
+        gradients = []
+        for output in (base, extended):
+            model.zero_grad(set_to_none=True)
+            output[2].square().mean().backward()
+            gradients.append({name: parameter.grad.clone() for name, parameter in model.named_parameters()
+                              if parameter.grad is not None})
+        self.assertIn('encoder.weight', gradients[0])
+        self.assertIn('mlp1.weight', gradients[0])
+        for name in gradients[0]:
+            torch.testing.assert_close(gradients[0][name], gradients[1][name], rtol=0, atol=0)
+        with self.assertRaisesRegex(ValueError, 'not both'):
+            model(x, None, [], lengths, return_visual_features=True, return_c_features=True)
+
+    def test_c_pca_gradient_only_updates_c_mlp_not_shared_encoder_or_a(self):
+        torch.manual_seed(88)
+        model = ToyModel()
+        args = c_args_for('--visual-width', '4', '--pca-rank', '2', '--pca-fit-videos', '4')
+        auxiliary = SnippetAuxiliaryLoss(args)
+        with contextlib.redirect_stdout(io.StringIO()):
+            auxiliary.begin_epoch(3, model, ToyDataset(True), 'cpu', TrainingLogger())
+        x = torch.randn(4, 17, 4, requires_grad=True)
+        lengths, labels = torch.tensor([17, 16, 12, 10]), torch.tensor([0, 0, 1, 1])
+        output = model(x, None, [], lengths, **auxiliary.forward_kwargs())
+        loss, metrics = auxiliary(output[1], output[3], lengths, labels, 3)
+        self.assertNotIn('loss_snippet', metrics)
+        self.assertIn('loss_pca', metrics)
+        self.assertFalse(auxiliary.pca.basis.requires_grad)
+        before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+        loss.backward()
+        self.assertIsNone(x.grad)
+        for name, parameter in model.named_parameters():
+            if name.startswith('mlp2.'):
+                self.assertIsNotNone(parameter.grad)
+                self.assertTrue(torch.isfinite(parameter.grad).all())
+            else:
+                self.assertIsNone(parameter.grad, name)
+        self.assertGreater(model.mlp2.weight.grad.abs().sum().item(), 0)
+        torch.optim.AdamW(model.parameters(), lr=.01).step()
+        for name, parameter in model.named_parameters():
+            if name.startswith('mlp2.'):
+                self.assertFalse(torch.equal(before[name], parameter), name)
+            else:
+                torch.testing.assert_close(before[name], parameter, rtol=0, atol=0)
+
+    def test_c_pca_masks_padding_before_the_c_head_gradient(self):
+        torch.manual_seed(9)
+        model = ToyModel()
+        h = torch.randn(2, 17, 4, requires_grad=True)
+        with torch.no_grad():
+            h[0, 8:] = float('nan')
+        lengths, labels = torch.tensor([8, 17]), torch.tensor([0, 1])
+        c_features = model.encode_c_features(h, detach_shared=True, lengths=lengths)
+        pca = NormalPCASubspace()
+        pca.fit(torch.randn(20, 4), 2)
+        loss, _ = pca_auxiliary_loss(c_features, lengths, labels, {1: torch.tensor([0, 1])}, pca)
+        loss.backward()
+        self.assertIsNone(h.grad)
+        self.assertTrue(torch.isfinite(model.mlp2.weight.grad).all())
+        self.assertGreater(model.mlp2.weight.grad.abs().sum().item(), 0)
+
+    def test_c_pca_warmup_matches_reference_training_exactly(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            np.save(root / 'gt.npy', np.zeros(1))
+            states = []
+            for name, flag in [('r', []), ('cp', ['--c-pca-loss'])]:
+                args = parser.parse_args([
+                    '--skip-eval', '--batch-size', '2', '--max-epoch', '2', '--visual-width', '4',
+                    '--temporal-segment-topk', '--temporal-segment-start-epoch', '1',
+                    '--temporal-smoothing-kernel', '3', '--temporal-smoothness-branch', 'a',
+                    '--temporal-smoothness-start-epoch', '1', '--pca-rank', '2',
+                    '--model-path', str(root / (name+'.pth')), '--checkpoint-path', str(root / (name+'_ckpt.pth')),
+                    '--log-path', str(root / (name+'.log')), *flag])
+                args.gt_path = args.gt_segment_path = args.gt_label_path = str(root / 'gt.npy')
+                torch.manual_seed(440)
+                model = ToyModel()
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.train(model, DataLoader(ToyDataset(True), batch_size=2),
+                               DataLoader(ToyDataset(False), batch_size=2), [], args,
+                               {'Normal': 'normal', 'Abnormal': 'abnormal'}, 'cpu')
+                states.append(torch.load(args.model_path, weights_only=True))
+            for key in states[0]:
+                torch.testing.assert_close(states[0][key], states[1][key], rtol=0, atol=0)
+
+    def test_c_calibration_uses_classifier_input_and_preserves_rng_modes(self):
+        torch.manual_seed(81)
+        model = ToyModel()
+        model.train(); model.classifier.eval()
+        args = c_args_for('--visual-width', '4', '--pca-rank', '2', '--pca-fit-videos', '4')
+        dataset = ToyDataset(True)
+        positions = np.random.default_rng(args.pca_fit_seed).permutation(len(dataset))
+        samples = []
+        with torch.no_grad():
+            for index in positions:
+                x, _, length = dataset[int(index)]
+                h = model.encode_video(x.unsqueeze(0), None, torch.tensor([length]))
+                samples.append(model.encode_c_features(h)[0])
+        expected = NormalPCASubspace()
+        expected.fit(torch.cat(samples), args.pca_rank)
+        before = torch.get_rng_state().clone()
+        actual = calibrate_normal_pca(model, dataset, 'cpu', args, 3)
+        torch.testing.assert_close(before, torch.get_rng_state(), rtol=0, atol=0)
+        torch.testing.assert_close(expected.mean, actual.mean, rtol=0, atol=0)
+        torch.testing.assert_close(expected.basis, actual.basis, rtol=0, atol=0)
+        self.assertEqual(actual.metadata['feature_source'], 'c_classifier_input')
+        self.assertEqual(actual.metadata['gradient_scope'], 'mlp2_only')
+        self.assertTrue(model.training)
+        self.assertFalse(model.classifier.training)
+
     def test_train_all_arms_and_pca_resume(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             np.save(root / 'gt.npy', np.zeros(1))
             checkpoints = []
             for name, flags in [('r', []), ('s', ['--snippet-ranking-loss']),
-                                ('sp', ['--snippet-ranking-loss', '--pca-loss'])]:
+                                ('sp', ['--snippet-ranking-loss', '--pca-loss']),
+                                ('cp', ['--c-pca-loss']),
+                                ('scp', ['--c-pca-loss', '--snippet-ranking-loss'])]:
                 args = parser.parse_args([
                     '--skip-eval', '--batch-size', '2', '--max-epoch', '3', '--visual-width', '4', '--pca-rank', '2',
                     '--temporal-segment-topk', '--temporal-segment-start-epoch', '1',
@@ -308,10 +500,15 @@ class TrainerIntegrationTests(unittest.TestCase):
                 ckpt = torch.load(args.checkpoint_path, weights_only=False)
                 checkpoints.append(ckpt)
                 self.assertTrue(all(torch.isfinite(t).all() for t in ckpt['model_state_dict'].values()))
-                if name == 'sp':
+                if name in ('sp', 'cp', 'scp'):
                     log = Path(args.log_path).read_text(encoding='utf-8')
                     self.assertEqual(log.count('pca_fit='), 1)
                     self.assertIn('avg_weighted_pca=', log)
+                    if name == 'cp':
+                        self.assertNotIn('avg_weighted_snippet=', log)
+                        self.assertIn('snippet_active=False pca_active=True', log)
+                    if name in ('cp', 'scp'):
+                        self.assertEqual(ckpt['snippet_auxiliary']['config']['pca_gradient_scope'], 'mlp2_only')
                     args.use_checkpoint, args.max_epoch = True, 4
                     before = ckpt['snippet_auxiliary']['pca']['basis']
                     with contextlib.redirect_stdout(io.StringIO()):

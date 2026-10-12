@@ -11,9 +11,12 @@ from topk_pooling import video_topk_size
 
 
 def validate_snippet_config(args):
+    c_pca = getattr(args, 'c_pca_loss', False)
+    if c_pca and args.pca_loss:
+        raise ValueError('Choose --c-pca-loss or legacy --pca-loss, not both')
     if args.pca_loss and not args.snippet_ranking_loss:
         raise ValueError('--pca-loss requires --snippet-ranking-loss')
-    if not args.snippet_ranking_loss:
+    if not (args.snippet_ranking_loss or c_pca):
         return
     if (args.c_ranking_loss or args.dual_k or args.adaptive_instance_selection
             or args.topk_pooling != 'mean' or args.c_temporal_segment_topk
@@ -21,27 +24,40 @@ def validate_snippet_config(args):
             or args.temporal_smoothness_branch in ('c', 'both')):
         raise ValueError('Snippet ablation requires original C Hard Top-K; '
                          'disable old ranking, Dual-K, AIS and C smoothing/segment')
-    for name in ('snippet_ranking_weight', 'snippet_ranking_margin',
-                 'snippet_ranking_temperature'):
-        value = getattr(args, name)
-        if not math.isfinite(value) or value <= 0:
-            raise ValueError(f'--{name.replace("_", "-")} must be finite and positive')
-    if args.snippet_ranking_margin >= 1 or args.snippet_ranking_start_epoch < 1:
-        raise ValueError('Score margin must be < 1 and start epoch >= 1')
-    if args.pca_loss:
+    if args.snippet_ranking_loss:
+        for name in ('snippet_ranking_weight', 'snippet_ranking_margin',
+                     'snippet_ranking_temperature'):
+            value = getattr(args, name)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f'--{name.replace("_", "-")} must be finite and positive')
+        if args.snippet_ranking_margin >= 1 or args.snippet_ranking_start_epoch < 1:
+            raise ValueError('Score margin must be < 1 and start epoch >= 1')
+    if c_pca and not (
+            args.temporal_segment_topk and args.temporal_segment_start_epoch == 1
+            and args.temporal_smoothing_kernel == 3
+            and args.temporal_smoothness_branch == 'a'
+            and args.temporal_smoothness_start_epoch == 1
+            and args.a_temporal_smoothness_weight == .05):
+        raise ValueError('--c-pca-loss requires the temporal-A reference: '
+                         'A segment from epoch 1, kernel 3, TV A from epoch 1 '
+                         'with weight 0.05')
+    if args.pca_loss or c_pca:
         for name in ('pca_weight', 'pca_margin'):
             if not math.isfinite(getattr(args, name)) or getattr(args, name) <= 0:
                 raise ValueError(f'{name} must be finite and positive')
         if not 1 <= args.pca_rank < args.visual_width:
             raise ValueError('--pca-rank must be in [1, visual-width)')
-        if args.pca_start_epoch < args.snippet_ranking_start_epoch:
+        if args.pca_start_epoch < 1:
+            raise ValueError('PCA start epoch must be >= 1')
+        if args.snippet_ranking_loss and args.pca_start_epoch < args.snippet_ranking_start_epoch:
             raise ValueError('PCA must start no earlier than snippet ranking')
         if min(args.pca_fit_videos, args.pca_fit_snippets) < 1 or args.pca_fit_seed < 0:
             raise ValueError('PCA sample limits must be positive and fit seed >= 0')
 
 
 def snippet_config(args):
-    if not args.snippet_ranking_loss:
+    c_pca = getattr(args, 'c_pca_loss', False)
+    if not (args.snippet_ranking_loss or c_pca):
         return {'enabled': False}
     names = ['seed', 'topk_pooling', 'temporal_segment_topk',
              'temporal_segment_start_epoch', 'temporal_smoothing_kernel',
@@ -51,9 +67,16 @@ def snippet_config(args):
              'snippet_ranking_mode', 'snippet_ranking_margin',
              'snippet_ranking_weight', 'snippet_ranking_temperature',
              'snippet_ranking_start_epoch', 'pca_loss']
-    if args.pca_loss:
+    if args.pca_loss or c_pca:
         names += ['pca_weight', 'pca_margin', 'pca_rank', 'pca_start_epoch',
                   'pca_fit_videos', 'pca_fit_snippets', 'pca_fit_seed']
+    if c_pca:
+        return {'enabled': True, 'version': 2,
+                'pca_feature_source': 'c_classifier_input',
+                'pca_gradient_scope': 'mlp2_only',
+                'c_pca_loss': True,
+                'snippet_ranking_loss': args.snippet_ranking_loss,
+                **{n: getattr(args, n) for n in names}}
     return {'enabled': True, 'version': 1, **{n: getattr(args, n) for n in names}}
 
 
@@ -98,7 +121,8 @@ def selected_ranking(positive, negative_max, zero, margin, mode='hinge', tempera
     }
 
 
-def snippet_score_ranking(logits, lengths, labels, margin=.1, mode='hinge', temperature=.05):
+def c_score_selection(logits, lengths, labels):
+    """Select positive snippets by raw C probabilities, without a ranking loss."""
     with torch.autocast(device_type=logits.device.type, enabled=False):
         scores = logits.float().squeeze(-1) if logits.ndim == 3 and logits.shape[-1] == 1 else logits.float()
         # Validate logits first: sigmoid would hide +/-inf.
@@ -107,6 +131,12 @@ def snippet_score_ranking(logits, lengths, labels, margin=.1, mode='hinge', temp
         indices = {i: v.detach().topk(video_topk_size(len(v))).indices
                    for i, v in enumerate(videos) if i in positive}
         zero = sum((v.sum() * 0 for v in videos), scores.new_zeros(()))
+        return videos, positive, negative, indices, zero
+
+
+def snippet_score_ranking(logits, lengths, labels, margin=.1, mode='hinge', temperature=.05):
+    with torch.autocast(device_type=logits.device.type, enabled=False):
+        videos, positive, negative, indices, zero = c_score_selection(logits, lengths, labels)
         loss, stats = selected_ranking(
             [videos[i][indices[i]] for i in positive],
             [videos[i].max() for i in negative], zero, margin, mode, temperature)
@@ -185,7 +215,12 @@ def calibrate_normal_pca(model, dataset, device, args, epoch):
                 if label != 'Normal' or not 1 <= int(length) <= len(features):
                     raise ValueError('Invalid Normal train calibration sample')
                 encoded = model.encode_video(features.unsqueeze(0).to(device), None,
-                                             torch.tensor([length], device=device))[0, :int(length)]
+                                             torch.tensor([length], device=device))
+                if getattr(args, 'c_pca_loss', False):
+                    encoded = model.encode_c_features(
+                        encoded, detach_shared=True,
+                        lengths=torch.tensor([length], device=device))
+                encoded = encoded[0, :int(length)]
                 positions = torch.linspace(0, int(length) - 1,
                                            min(args.pca_fit_snippets, int(length))).long().to(encoded.device)
                 samples.append(encoded[positions].float().cpu())
@@ -196,6 +231,9 @@ def calibrate_normal_pca(model, dataset, device, args, epoch):
                 'fit_epoch': epoch, 'videos': len(indices), 'fit_seed': args.pca_fit_seed,
                 'sample_indices_sha256': hashlib.sha256(indices.astype('<i8').tobytes()).hexdigest(),
             })
+            if getattr(args, 'c_pca_loss', False):
+                subspace.metadata.update(feature_source='c_classifier_input',
+                                         gradient_scope='mlp2_only')
             return subspace
     finally:
         np.random.set_state(numpy_state)
@@ -230,27 +268,46 @@ class SnippetAuxiliaryLoss:
         self.pca = NormalPCASubspace()
 
     def active(self, epoch):
+        return self.snippet_active(epoch) or self.pca_active(epoch)
+
+    def snippet_active(self, epoch):
         return self.args.snippet_ranking_loss and epoch >= self.args.snippet_ranking_start_epoch
 
+    @property
+    def pca_enabled(self):
+        return self.args.pca_loss or getattr(self.args, 'c_pca_loss', False)
+
+    @property
+    def c_pca(self):
+        return getattr(self.args, 'c_pca_loss', False)
+
+    def forward_kwargs(self):
+        return {'return_c_features': True} if self.c_pca else {'return_visual_features': True}
+
     def pca_active(self, epoch):
-        return self.args.pca_loss and epoch >= self.args.pca_start_epoch
+        return self.pca_enabled and epoch >= self.args.pca_start_epoch
 
     def begin_epoch(self, epoch, model, normal_dataset, device, logger):
         if self.pca_active(epoch) and not self.pca.fitted:
             self.pca = calibrate_normal_pca(model, normal_dataset, device, self.args, epoch)
             logger.log(f'pca_fit={self.pca.metadata}')
-        if self.args.snippet_ranking_loss:
-            logger.log(f'epoch={epoch} snippet_active={self.active(epoch)} pca_active={self.pca_active(epoch)}')
+        if self.config['enabled']:
+            logger.log(f'epoch={epoch} snippet_active={self.snippet_active(epoch)} pca_active={self.pca_active(epoch)}')
 
     def __call__(self, logits, features, lengths, labels, epoch):
         if not self.active(epoch):
             raise ValueError('Call auxiliary loss only after its start epoch')
-        score_loss, stats, indices = snippet_score_ranking(
-            logits, lengths, labels, self.args.snippet_ranking_margin,
-            self.args.snippet_ranking_mode, self.args.snippet_ranking_temperature)
-        total = self.args.snippet_ranking_weight * score_loss
-        metrics = {f'snippet_{k}': v for k, v in stats.items()}
-        metrics.update(loss_snippet=score_loss.detach().item(), weighted_snippet=total.detach().item())
+        if self.snippet_active(epoch):
+            score_loss, stats, indices = snippet_score_ranking(
+                logits, lengths, labels, self.args.snippet_ranking_margin,
+                self.args.snippet_ranking_mode, self.args.snippet_ranking_temperature)
+            total = self.args.snippet_ranking_weight * score_loss
+            metrics = {f'snippet_{k}': v for k, v in stats.items()}
+            metrics.update(loss_snippet=score_loss.detach().item(), weighted_snippet=total.detach().item())
+        else:
+            with torch.no_grad():
+                _, _, _, indices, _ = c_score_selection(logits, lengths, labels)
+            total, metrics = logits.new_zeros((), dtype=torch.float32), {}
         if self.pca_active(epoch):
             pca_loss, pca_stats = pca_auxiliary_loss(features, lengths, labels, indices,
                                                    self.pca, self.args.pca_margin)
@@ -269,8 +326,12 @@ class SnippetAuxiliaryLoss:
             raise ValueError('Checkpoint snippet/PCA configuration differs; use matching flags or a new run')
         state = saved.get('pca')
         if state is not None:
-            if not self.args.pca_loss:
+            if not self.pca_enabled:
                 raise ValueError('Unexpected PCA basis in checkpoint')
+            if self.c_pca and (
+                    state.get('metadata', {}).get('feature_source') != 'c_classifier_input'
+                    or state.get('metadata', {}).get('gradient_scope') != 'mlp2_only'):
+                raise ValueError('Checkpoint PCA basis is not calibrated for the C branch')
             self.pca.load_state_dict(state, self.args.visual_width, self.args.pca_rank)
         elif self.pca_active(checkpoint.get('epoch', -1) + 1):
             raise ValueError('Active PCA checkpoint is missing its fitted basis')

@@ -144,11 +144,11 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
 
 def train(model, normal_loader, anomaly_loader, testloader, args, label_map, device):
     auxiliary = SnippetAuxiliaryLoss(args)
-    if args.snippet_ranking_loss and not args.use_checkpoint:
+    if auxiliary.config['enabled'] and not args.use_checkpoint:
         for output in (args.checkpoint_path, args.model_path, args.log_path):
             if output and Path(output).exists():
                 raise ValueError(f'New snippet/PCA run would overwrite {output}; choose new output paths')
-    if args.pca_loss and getattr(model, 'uses_fixed_prototypes', False):
+    if auxiliary.pca_enabled and getattr(model, 'uses_fixed_prototypes', False):
         raise ValueError('PCA ablation is currently supported only by the standard CLIPVAD model')
     validate_temperature_config(args)
     validate_ranking_config(args)
@@ -437,7 +437,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 if auxiliary.pca_active(e + 1):
                     text_features, logits1, logits2, learned_features = model(
                         visual_features, None, prompt_text, feat_lengths,
-                        return_visual_features=True,
+                        **auxiliary.forward_kwargs(),
                     )
                 else:
                     text_features, logits1, logits2 = model(
