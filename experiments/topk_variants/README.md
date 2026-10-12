@@ -4,10 +4,18 @@ Folder này chứa code thí nghiệm Top-K. PCA cũ dùng `return_visual_featur
 (feature chung); PCA riêng ở C dùng `return_c_features` trong `src/model.py`.
 Lời gọi mặc định vẫn trả ba output và giữ đường tính của baseline.
 
+Thí nghiệm **Temporal-A + tail shift 26**: bật `--tail-shift-augmentation`
+và `--tail-shift-offset 26` để lấy trung bình MIL loss C/A của view gốc và
+view dịch. A giữ Conv1D k3 + segment + TV A=0,05 từ epoch 1; TV chỉ tính trên
+view gốc, consistency loss tắt. Shift mặc định tắt; không cần checkout khác.
+Lệnh R/RA ghép seed nằm dưới đây; thiết kế và cách đọc log ở
+`reports/topk_variants/LENH_KAGGLE_TAIL26_TEMPORAL_A_2026-10-12.md` (local).
+Cấu hình mới chưa có kết quả UCF-Crime.
+
 Báo cáo và thiết kế nằm trong `reports/topk_variants/`, log trong `logs/` ở máy
 local; các thư mục này được Git bỏ qua. Lệnh chạy PCA C nằm ngay dưới đây.
 
-Thí nghiệm hiện tại: PCA ở C, giữ Temporal-A.
+Thí nghiệm PCA ở C, giữ Temporal-A.
 `--c-pca-loss` áp PCA lên `h + mlp2(h)`, chặn gradient PCA về encoder chung;
 PCA chỉ cập nhật `mlp2`. A giữ Conv1D k3 + segment từ epoch 1 + TV A=0,05.
 Cấu hình chính chạy PCA độc lập, tắt snippet ranking; chưa có AUC của CP.
@@ -16,6 +24,62 @@ A vẫn có thể thay đổi gián tiếp qua visual prompt sử dụng score C
 Thí nghiệm cũ S/SP giữ các cờ `--snippet-ranking-loss` / `--pca-loss` để đối chiếu.
 Các loss mặc định tắt. Cấu hình CLI dùng trong test nằm ở
 `tests/fixtures/training_commands.json`; tests không phụ thuộc báo cáo local.
+
+## Chạy Temporal-A + tail shift 26 trên Kaggle
+
+Chạy R và RA_tail26 cùng seed 234, cùng GPU, feature/CSV và môi trường.
+Để ghép ba seed, thay mọi `234` bằng `3407`, rồi `2026`, cả seed và output.
+Nếu chạy lại, đổi `t4_tail26_temporal_a_r1` thành tên mới. AMP tắt,
+accumulation 1. RA không bật PCA, ranking, Dual-K hoặc AIS.
+
+Tail shift thêm 26 vị trí zero ở đầu chuỗi feature sau `process_feat`, giữ
+độ dài `min(T_valid + 26, 256)` và bỏ phần bị đẩy qua cuối lưới. Đây là 26
+vị trí feature, không nhất thiết là 26 frame video gốc. MIL C/A lấy trung bình
+hai view; text regularization và TV A=0,05 giữ trên view gốc. Consistency loss
+tắt; evaluator vẫn dùng một view gốc.
+
+### R — Temporal-A đối chứng
+
+```bash
+!cd /kaggle/working/VadCLIP && \
+python -u experiments/topk_variants/train_ucf.py \
+  --train-list /kaggle/working/ucf_CLIP_rgb_kaggle.csv \
+  --test-list /kaggle/working/ucf_CLIP_rgbtest_kaggle.csv \
+  --seed 234 --batch-size 64 --max-epoch 10 \
+  --topk-pooling mean \
+  --temporal-segment-topk --temporal-segment-start-epoch 1 \
+  --temporal-smoothing-kernel 3 \
+  --temporal-smoothness-branch a --temporal-smoothness-start-epoch 1 \
+  --a-temporal-smoothness-weight 0.05 \
+  --model-path outputs/t4_tail26_temporal_a_r1/R_seed234/model.pth \
+  --checkpoint-path outputs/t4_tail26_temporal_a_r1/R_seed234/checkpoint.pth \
+  --log-path outputs/t4_tail26_temporal_a_r1/R_seed234/train.log
+```
+
+### RA_tail26 — R + tail augmentation
+
+```bash
+!cd /kaggle/working/VadCLIP && \
+python -u experiments/topk_variants/train_ucf.py \
+  --train-list /kaggle/working/ucf_CLIP_rgb_kaggle.csv \
+  --test-list /kaggle/working/ucf_CLIP_rgbtest_kaggle.csv \
+  --seed 234 --batch-size 64 --max-epoch 10 \
+  --topk-pooling mean \
+  --temporal-segment-topk --temporal-segment-start-epoch 1 \
+  --temporal-smoothing-kernel 3 \
+  --temporal-smoothness-branch a --temporal-smoothness-start-epoch 1 \
+  --a-temporal-smoothness-weight 0.05 \
+  --tail-shift-augmentation --tail-shift-offset 26 \
+  --model-path outputs/t4_tail26_temporal_a_r1/RA_tail26_seed234/model.pth \
+  --checkpoint-path outputs/t4_tail26_temporal_a_r1/RA_tail26_seed234/checkpoint.pth \
+  --log-path outputs/t4_tail26_temporal_a_r1/RA_tail26_seed234/train.log
+```
+
+Header RA có `tail_shift_config` với `direction='tail'`, `offset=26`,
+`consistency_weight=0.0`; mỗi epoch có `shift_consistency_active=False`.
+Batch log tách `loss1_original`, `loss1_tail`, `loss2_original`, `loss2_tail`
+và đếm `tail_clipped_videos`. Checkpoint lưu cấu hình shift và từ chối resume
+nếu đổi offset hoặc thêm/bỏ augmentation.
 
 ## Chạy PCA C trên Kaggle
 

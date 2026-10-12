@@ -2,6 +2,13 @@ import argparse
 
 parser = argparse.ArgumentParser(description='VadCLIP')
 
+# Fixed tail shift after process_feat; off for all existing experiments.
+parser.add_argument('--tail-shift-augmentation', action='store_true',
+                    help='Average C/A MIL losses over original and tail-shifted views; '
+                         'requires the Temporal-A reference, no consistency loss')
+parser.add_argument('--tail-shift-offset', type=int, default=26,
+                    help='Prepend this many zero feature rows and truncate the tail')
+
 # Independent of the older pooled-score --c-ranking-loss ablation.
 parser.add_argument('--snippet-ranking-loss', action='store_true')
 parser.add_argument('--snippet-ranking-mode', choices=['hinge', 'softplus'], default='hinge')

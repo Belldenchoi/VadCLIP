@@ -143,11 +143,16 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
     return clsloss
 
 def train(model, normal_loader, anomaly_loader, testloader, args, label_map, device):
+    from shift_augmentation import TailShiftAugmentation
+
+    tail_shift = TailShiftAugmentation(args)
     auxiliary = SnippetAuxiliaryLoss(args)
-    if auxiliary.config['enabled'] and not args.use_checkpoint:
+    if (auxiliary.config['enabled'] or tail_shift.enabled) and not args.use_checkpoint:
         for output in (args.checkpoint_path, args.model_path, args.log_path):
             if output and Path(output).exists():
-                raise ValueError(f'New snippet/PCA run would overwrite {output}; choose new output paths')
+                raise ValueError(f'New auxiliary/shift run would overwrite {output}; choose new output paths')
+    if tail_shift.enabled and getattr(model, 'uses_fixed_prototypes', False):
+        raise ValueError('Tail shift ablation requires the standard CLIPVAD model')
     if auxiliary.pca_enabled and getattr(model, 'uses_fixed_prototypes', False):
         raise ValueError('PCA ablation is currently supported only by the standard CLIPVAD model')
     validate_temperature_config(args)
@@ -266,6 +271,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"topk_temperature_config={temperature_config(args)} "
         f"c_ranking_config={ranking_config(args)} "
         f"snippet_auxiliary_config={auxiliary.config} "
+        f"tail_shift_config={tail_shift.config} "
         f"multi_k_percentages={args.multi_k_percentages} "
         f"adaptive_instance_selection={args.adaptive_instance_selection} "
         f"dual_k={args.dual_k} "
@@ -316,6 +322,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         )
         validate_checkpoint_temperature(args, checkpoint)
         validate_checkpoint_ranking(args, checkpoint)
+        tail_shift.validate_checkpoint(checkpoint)
         auxiliary.restore(checkpoint)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -368,6 +375,11 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             logger.log(f"epoch={e + 1} c_ranking_active={c_ranking_active}")
         model.train()
         auxiliary.begin_epoch(e + 1, model, normal_loader.dataset, device, logger)
+        if tail_shift.enabled:
+            logger.log(f'epoch={e + 1} tail_shift_active=True '
+                       f'tail_shift_offset={tail_shift.offset} '
+                       'shift_task_branches=both shift_tv_scope=original '
+                       'shift_consistency_active=False')
         auxiliary_totals = {}
         temporal_segment_active = (
             args.temporal_segment_topk and
@@ -434,7 +446,19 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
             with torch.autocast(device_type=device, dtype=torch.float16,
                                 enabled=use_amp):
                 learned_features = None
-                if auxiliary.pca_active(e + 1):
+                shift_text = ''
+                if tail_shift.enabled:
+                    shifted_features, shifted_lengths = tail_shift.make_view(
+                        visual_features, feat_lengths)
+                    batch_size = visual_features.shape[0]
+                    text_features, both_logits1, both_logits2 = model(
+                        torch.cat([visual_features, shifted_features], dim=0),
+                        None, prompt_text,
+                        torch.cat([feat_lengths, shifted_lengths], dim=0),
+                    )
+                    logits1, shifted_logits1 = both_logits1.split(batch_size, dim=0)
+                    logits2, shifted_logits2 = both_logits2.split(batch_size, dim=0)
+                elif auxiliary.pca_active(e + 1):
                     text_features, logits1, logits2, learned_features = model(
                         visual_features, None, prompt_text, feat_lengths,
                         **auxiliary.forward_kwargs(),
@@ -506,6 +530,30 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                               None if (dual_a_selection is None or
                                        args.dual_k_diagnostics_only)
                               else dual_a_selection.weights)
+                if tail_shift.enabled:
+                    shifted_loss1 = CLAS2(
+                        shifted_logits1, text_labels, shifted_lengths, device,
+                        c_temperature, args.topk_pooling, args.multi_k_percentages,
+                    )
+                    shifted_loss2 = CLASM(
+                        shifted_logits2, text_labels, shifted_lengths, device,
+                        a_temperature, args.topk_pooling, args.multi_k_percentages,
+                        temporal_segment=temporal_segment_active,
+                        temporal_smoothing_kernel=args.temporal_smoothing_kernel,
+                    )
+                    clipped_videos = int((
+                        feat_lengths + tail_shift.offset > visual_features.shape[1]
+                    ).sum().item())
+                    shift_text = (
+                        f'loss1_original={loss1.item():.6f} '
+                        f'loss1_tail={shifted_loss1.item():.6f} '
+                        f'loss2_original={loss2.item():.6f} '
+                        f'loss2_tail={shifted_loss2.item():.6f} '
+                        f'tail_shift_offset={tail_shift.offset} '
+                        f'tail_clipped_videos={clipped_videos} '
+                    )
+                    loss1 = .5 * (loss1 + shifted_loss1)
+                    loss2 = .5 * (loss2 + shifted_loss2)
                 loss3 = torch.zeros(1, device=device)
                 if not getattr(model, 'uses_fixed_prototypes', False):
                     text_feature_normal = (
@@ -728,6 +776,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     f"{dual_text}"
                     f"{ranking_text}"
                     f"{auxiliary_text}"
+                    f"{shift_text}"
                     f"peak_vram={peak_vram:.2f}GB"
                 )
             step += i * normal_loader.batch_size * 2
@@ -745,6 +794,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         'topk_temperature_config': temperature_config(args),
                         'c_ranking_config': ranking_config(args),
                         'snippet_auxiliary': auxiliary.state_dict(),
+                        'tail_shift_config': tail_shift.config,
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'dual_lambda_c': dual_lambda_c,
@@ -795,6 +845,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 'topk_temperature_config': temperature_config(args),
                 'c_ranking_config': ranking_config(args),
                 'snippet_auxiliary': auxiliary.state_dict(),
+                'tail_shift_config': tail_shift.config,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),

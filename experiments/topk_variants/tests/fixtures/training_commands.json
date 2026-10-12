@@ -274,5 +274,34 @@
     "outputs/ucf_soft_a_tau_2to1_checkpoint.pth",
     "--log-path",
     "outputs/ucf_soft_a_tau_2to1.log"
-  ]
+  ],
+  "tail_shift": {
+    "R": [
+      "--train-list", "/kaggle/working/ucf_CLIP_rgb_kaggle.csv",
+      "--test-list", "/kaggle/working/ucf_CLIP_rgbtest_kaggle.csv",
+      "--seed", "234", "--batch-size", "64", "--max-epoch", "10",
+      "--topk-pooling", "mean",
+      "--temporal-segment-topk", "--temporal-segment-start-epoch", "1",
+      "--temporal-smoothing-kernel", "3",
+      "--temporal-smoothness-branch", "a", "--temporal-smoothness-start-epoch", "1",
+      "--a-temporal-smoothness-weight", "0.05",
+      "--model-path", "outputs/t4_tail26_temporal_a_r1/R_seed234/model.pth",
+      "--checkpoint-path", "outputs/t4_tail26_temporal_a_r1/R_seed234/checkpoint.pth",
+      "--log-path", "outputs/t4_tail26_temporal_a_r1/R_seed234/train.log"
+    ],
+    "RA_tail26": [
+      "--train-list", "/kaggle/working/ucf_CLIP_rgb_kaggle.csv",
+      "--test-list", "/kaggle/working/ucf_CLIP_rgbtest_kaggle.csv",
+      "--seed", "234", "--batch-size", "64", "--max-epoch", "10",
+      "--topk-pooling", "mean",
+      "--temporal-segment-topk", "--temporal-segment-start-epoch", "1",
+      "--temporal-smoothing-kernel", "3",
+      "--temporal-smoothness-branch", "a", "--temporal-smoothness-start-epoch", "1",
+      "--a-temporal-smoothness-weight", "0.05",
+      "--tail-shift-augmentation", "--tail-shift-offset", "26",
+      "--model-path", "outputs/t4_tail26_temporal_a_r1/RA_tail26_seed234/model.pth",
+      "--checkpoint-path", "outputs/t4_tail26_temporal_a_r1/RA_tail26_seed234/checkpoint.pth",
+      "--log-path", "outputs/t4_tail26_temporal_a_r1/RA_tail26_seed234/train.log"
+    ]
+  }
 }
