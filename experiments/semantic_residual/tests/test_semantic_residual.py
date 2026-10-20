@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import re
 import shlex
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -118,6 +119,27 @@ class ResidualTests(unittest.TestCase):
 
     def setUp(self):
         torch.manual_seed(234)
+
+    def test_entrypoints_find_src_utils_in_a_fresh_python_process(self):
+        # Parent fixtures preload src and utils. An isolated child must find
+        # them using ONLY the entry point's own path setup, as on Kaggle.
+        code = (
+            "import runpy, sys; from pathlib import Path; "
+            "runpy.run_path(sys.argv[1], run_name='entry_fixture'); "
+            "import dataset_variants; import utils.tools; "
+            "assert Path(utils.tools.__file__).resolve() == "
+            "Path(sys.argv[2]).resolve()"
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            for name in ('train.py', 'evaluate.py'):
+                with self.subTest(entry=name):
+                    result = subprocess.run(
+                        [sys.executable, '-I', '-B', '-c', code,
+                         str(REPO / 'experiments' / 'semantic_residual' / name),
+                         str(REPO / 'src' / 'utils' / 'tools.py')],
+                        cwd=folder, capture_output=True, text=True,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_zero_start_and_nonzero_first_head_gradient(self):
         branch = SemanticResidualBranch(8, 3, 8, 3)

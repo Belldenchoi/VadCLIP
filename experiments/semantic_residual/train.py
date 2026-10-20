@@ -6,6 +6,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / 'experiments' / 'topk_variants'))
+sys.path.insert(0, str(REPO_ROOT / 'src'))
 
 from experiments.semantic_residual.options import build_parser, validate_config, validate_output_paths
 
