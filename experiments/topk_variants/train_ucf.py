@@ -261,8 +261,6 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
     logger = TrainingLogger(args.log_path, append=args.use_checkpoint)
     Path(args.model_path).parent.mkdir(parents=True, exist_ok=True)
     Path(args.checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
-    if hasattr(model, 'semantic_residual_config'):
-        logger.log(f'semantic_residual_config={model.semantic_residual_config}')
     if use_amp:
         torch.cuda.reset_peak_memory_stats()
     logger.log(
@@ -779,7 +777,6 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                     f"{ranking_text}"
                     f"{auxiliary_text}"
                     f"{shift_text}"
-                    f"{model.residual_log_text() if hasattr(model, 'residual_log_text') else ''}"
                     f"peak_vram={peak_vram:.2f}GB"
                 )
             step += i * normal_loader.batch_size * 2
