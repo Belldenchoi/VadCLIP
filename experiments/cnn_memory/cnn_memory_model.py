@@ -34,7 +34,8 @@ class CNNMemoryCLIPVAD(CLIPVAD):
     def set_memory_active(self, active):
         self.memory_active.fill_(bool(active) and self.memory is not None)
 
-    def forward(self, visual, padding_mask, text, lengths, return_aux=False):
+    def forward(self, visual, padding_mask, text, lengths, return_aux=False,
+                return_shared_features=False):
         # Same ordinary forward as CLIPVAD; no auxiliary interfaces in src required.
         features = self.encode_video(visual, padding_mask, lengths)
         logits_c = self.classifier(features + self.mlp2(features))
@@ -58,6 +59,8 @@ class CNNMemoryCLIPVAD(CLIPVAD):
             if self.aux_branch in ("a", "both"):
                 logits_a = logits_a + self.residual_scale * auxiliary["delta_a"]
         outputs = (text_original, logits_c, logits_a)
+        if return_shared_features:
+            return (*outputs, auxiliary, features)
         return (*outputs, auxiliary) if return_aux else outputs
 
 
