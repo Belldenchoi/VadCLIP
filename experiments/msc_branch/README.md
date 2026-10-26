@@ -11,6 +11,12 @@ Code mới tách trong thư mục này. Dùng lại dataset, CNN memory và eval
 wrapper CNN có tùy chọn trả feature chung, mặc định giữ output cũ. Không sửa
 `src/`. Cần code CNN memory trong cùng checkout để chạy.
 
+Train và evaluate checkpoint dùng chung `experiments/topk_variants/test_ucf.py::test`
+qua adapter CNN: giữ chunk/mask của bản gốc, raw sigmoid C và 1-softmax Normal
+của A, repeat 16, detection mAP tại IoU 0.1–0.5 và format log Top-K.
+MLP contrastive không chạy lúc test. Cần cập nhật đồng bộ `msc_branch`,
+`cnn_memory` và evaluator Top-K trong cùng checkout.
+
 ```bash
 python experiments/msc_branch/train.py --help
 python -B -m unittest discover -s experiments/msc_branch/tests -v
@@ -59,7 +65,8 @@ Các liên kết báo cáo ở trên là tài liệu local trong `reports/` (Git
 lệnh chạy và hướng dẫn chính cũng có sẵn trong README này.
 
 Các tests dùng fixture CPU và CLIP giả để kiểm tra số học/gradient/resume.
-14 kiểm thử mới và 17 kiểm thử CNN cũ đã qua. Mode none khớp từng bit với
+14 kiểm thử MSC và 18 kiểm thử CNN đã qua. Mode none khớp từng bit với
 trainer CNN trên fixture; resume mean-shifted khớp train liên tục, tâm không
-fit lại. Đây là kiểm chứng triển khai với dữ liệu giả và mAP giả lập.
+fit lại. Fixture train dùng dữ liệu giả và mAP giả lập; fixture hồi quy evaluator
+riêng tính cả mAP thật, khớp evaluator UCF gốc và Top-K trên dữ liệu giả đủ 14 lớp.
 Chưa có kết quả huấn luyện GPU hoặc bằng chứng tăng AUC của nhánh mới.

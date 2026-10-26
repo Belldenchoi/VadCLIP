@@ -10,7 +10,6 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 ORIGINAL_SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(ORIGINAL_SRC))
 
-from model import CLIPVAD
 from dataset_variants import UCFDataset
 from utils.tools import get_batch_mask, get_prompt_text
 from detection_map import getDetectionMAP as dmAP
@@ -18,7 +17,7 @@ from training_log import TrainingLogger
 import options as ucf_option
 
 def test(model, testdataloader, maxlen, prompt_text, gt, gtsegments, gtlabels,
-         device, logger=None, detection_class_indices=None):
+         device, logger=None, detection_class_indices=None, return_metrics=False):
     report = logger.log if logger else lambda message: print(message, flush=True)
     report("temporal_eval_active=False evaluation_mode=original")
     
@@ -96,10 +95,15 @@ def test(model, testdataloader, maxlen, prompt_text, gt, gtsegments, gtlabels,
     averageMAP = averageMAP/(i+1)
     report('average_mAP={:.2f}%'.format(averageMAP))
 
+    if return_metrics:
+        return dict(AUC1=float(ROC1), AP1=float(AP1), AUC2=float(ROC2),
+                    AP2=float(AP2), mAP=float(averageMAP))
     return ROC1, AP1
 
 
 if __name__ == '__main__':
+    from model import CLIPVAD
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args = ucf_option.parser.parse_args()
 

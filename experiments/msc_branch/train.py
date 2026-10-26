@@ -117,7 +117,8 @@ def main():
         nonlocal best_metrics
         rng = capture_rng()
         try:
-            metrics = evaluate(model, test_loader, prompt_text, gt, gtsegments, gtlabels, device, logger.log)
+            metrics = evaluate(model, test_loader, args.visual_length, prompt_text,
+                               gt, gtsegments, gtlabels, device, logger.log)
         finally:
             restore_rng(rng)
             model.train()

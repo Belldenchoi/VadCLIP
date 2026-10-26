@@ -41,7 +41,8 @@ def main():
     logger.log(f"evaluation_model={args.checkpoint} clips={len(dataset)} actions=all "
                f"device={device} epoch={checkpoint['epoch']} "
                f"memory_active={bool(model.memory_active)} config={json.dumps(checkpoint['model_config'])}")
-    evaluate(model, loader, get_prompt_text(LABEL_MAP), np.load(args.gt_path),
+    evaluate(model, loader, checkpoint["model_config"]["visual_length"],
+             get_prompt_text(LABEL_MAP), np.load(args.gt_path),
              np.load(args.gt_segment_path, allow_pickle=True),
              np.load(args.gt_label_path, allow_pickle=True), device, logger.log)
 

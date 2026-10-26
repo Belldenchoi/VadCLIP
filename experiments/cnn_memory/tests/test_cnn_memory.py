@@ -5,7 +5,9 @@ import contextlib
 import csv
 import importlib
 import io
+import json
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -284,7 +286,7 @@ class ModelIntegrationTests(unittest.TestCase):
                     args += ["--resume", str(output / "last.pt")]
                 with patch.object(sys, "argv", args), patch.object(entrypoint, "training_device", return_value="cpu"), \
                         patch.object(cnn_memory_model, "build_model", side_effect=lambda *a: TinyDetector()), \
-                        patch("experiments.cnn_memory.evaluation.getDetectionMAP", return_value=([0.] * 5, [.1, .2, .3, .4, .5])), \
+                        patch("experiments.topk_variants.test_ucf.dmAP", return_value=([0.] * 5, [.1, .2, .3, .4, .5])), \
                         contextlib.redirect_stdout(io.StringIO()):
                     entrypoint.main()
 
@@ -300,6 +302,37 @@ class ModelIntegrationTests(unittest.TestCase):
             self.assertEqual(actual["best_metrics"], expected["best_metrics"])
             for key, value in actual["model_state_dict"].items():
                 torch.testing.assert_close(value, expected["model_state_dict"][key], rtol=0, atol=0)
+
+            # Same progress/AUC patterns used by tools/report_helpers/export_tables.py.
+            # Every evaluation must retain its epoch/batch context, including the
+            # final batch, while the precise JSON metrics stay unchanged.
+            log_lines = (uninterrupted / "train.log").read_text(encoding="utf-8").splitlines()
+            history = [json.loads(line) for line in (uninterrupted / "metrics.jsonl").read_text().splitlines()]
+            epoch = batch = None
+            legacy_records = []
+            for line in log_lines:
+                progress = re.search(r"epoch=(\d+)/\d+ batch=(\d+)/\d+", line)
+                if progress:
+                    epoch, batch = map(int, progress.groups())
+                    losses = {key: float(value) for key, value in re.findall(
+                        r"\b(loss|loss1|loss2|loss3|weighted_memory)=([\d.]+)", line
+                    )}
+                    self.assertAlmostEqual(losses["loss"], sum(losses[k] for k in (
+                        "loss1", "loss2", "loss3", "weighted_memory"
+                    )), delta=0.0003)
+                    self.assertIn("lr=", line)
+                    self.assertIn("peak_vram=", line)
+                metric = re.search(r"AUC1[=:]\s*([\d.]+)", line)
+                if metric:
+                    legacy_records.append((epoch, batch, float(metric[1])))
+            self.assertEqual(len(legacy_records), len(history))
+            self.assertEqual([(e, b) for e, b, _ in legacy_records], [(1, 1), (2, 1)])
+            for (_, _, auc), record in zip(legacy_records, history):
+                self.assertAlmostEqual(auc, record["AUC1"], places=6)
+            self.assertEqual(sum("epoch_summary=" in line for line in log_lines), 2)
+            self.assertIn("device=cpu amp=False epochs=2 seed=234 batch_size=1", log_lines[0])
+            self.assertTrue(any("model_saved=" in line for line in log_lines))
+            self.assertIn("checkpoint_resumed=", (resumed / "train.log").read_text())
 
 
 class DataAndEvaluationTests(unittest.TestCase):
@@ -341,8 +374,8 @@ class DataAndEvaluationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_data(args)
 
-    def test_evaluation_discards_empty_chunk_and_uses_raw_repeat16_scores(self):
-        from experiments.cnn_memory.evaluation import evaluate, frame_metrics
+    def test_evaluation_keeps_original_chunks_and_uses_raw_repeat16_scores(self):
+        from experiments.cnn_memory.evaluation import evaluate
 
         class Detector(nn.Module):
             def forward(self, features, mask, text, lengths):
@@ -357,14 +390,25 @@ class DataAndEvaluationTests(unittest.TestCase):
         features[0, 1, :, 0] = 2
         detector = Detector()
         gt = np.repeat([0] * 4 + [1] * 4, 16)
-        with patch("experiments.cnn_memory.evaluation.getDetectionMAP", return_value=([0.] * 5, [.1, .2, .3, .4, .5])):
-            result = evaluate(detector, [(features, ["Abuse"], torch.tensor([8]))], [], gt, [], [], "cpu", log=lambda _: None)
-        self.assertEqual(detector.batch_count, 2)
-        self.assertEqual(detector.lengths.tolist(), [4, 4])
+        messages = []
+        loader = [(features, ["Abuse"], torch.tensor([8]))]
+        with patch("experiments.topk_variants.test_ucf.dmAP", return_value=([10., 8., 6., 4., 2.], [.1, .2, .3, .4, .5])):
+            result = evaluate(detector, loader, 4, [], gt, [], [], "cpu", log=messages.append)
+        self.assertEqual(detector.batch_count, 3)
+        self.assertEqual(detector.lengths.tolist(), [4, 4, 4])
         self.assertEqual(result["AUC1"], 1.)
         self.assertEqual(result["AUC2"], 1.)
+        self.assertEqual(result["mAP"], 6.)  # Already percent, not multiplied by 100.
+        self.assertIn("temporal_eval_active=False evaluation_mode=original", messages)
+        self.assertIn("AUC1=1.000000 AP1=1.000000", messages)
+        self.assertIn("AUC2=1.000000 AP2=1.000000", messages)
+        self.assertEqual([line for line in messages if line.startswith("mAP@")], [
+            "mAP@0.1=10.00%", "mAP@0.2=8.00%", "mAP@0.3=6.00%",
+            "mAP@0.4=4.00%", "mAP@0.5=2.00%",
+        ])
+        self.assertEqual(messages[-1], "average_mAP=6.00%")
         with self.assertRaises(ValueError):
-            frame_metrics([0], [0], np.zeros(2))
+            evaluate(detector, loader, 4, [], np.zeros(2), [], [], "cpu", log=lambda _: None)
 
     def test_cli_help_entrypoints_work_outside_repository(self):
         with tempfile.TemporaryDirectory() as directory:

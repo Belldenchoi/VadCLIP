@@ -263,7 +263,7 @@ class ModelAndTrainingTests(unittest.TestCase):
                 if resume: flags += ['--resume', str(output/'last.pt')]
                 with patch.object(sys, 'argv', flags), patch.object(entrypoint, 'training_device', return_value='cpu'), \
                      patch.object(self.module, 'build_model', side_effect=lambda *args: TinyDetector()), \
-                     patch('experiments.cnn_memory.evaluation.getDetectionMAP', return_value=([0.]*5, [.1,.2,.3,.4,.5])), \
+                     patch('experiments.topk_variants.test_ucf.dmAP', return_value=([0.]*5, [.1,.2,.3,.4,.5])), \
                      contextlib.redirect_stdout(io.StringIO()):
                     entrypoint.main()
                 return load_checkpoint(output/'last.pt')
@@ -280,7 +280,7 @@ class ModelAndTrainingTests(unittest.TestCase):
             with patch.object(sys, 'argv', ['train.py', *old_common, '--output-dir', str(legacy_output), '--max-epoch', '3']), \
                  patch.object(old_entrypoint, 'training_device', return_value='cpu'), \
                  patch.object(cnn_memory_model, 'build_model', side_effect=lambda *args: TinyDetector()), \
-                 patch('experiments.cnn_memory.evaluation.getDetectionMAP', return_value=([0.]*5, [.1,.2,.3,.4,.5])), \
+                 patch('experiments.topk_variants.test_ucf.dmAP', return_value=([0.]*5, [.1,.2,.3,.4,.5])), \
                  contextlib.redirect_stdout(io.StringIO()):
                 old_entrypoint.main()
             legacy = torch.load(legacy_output/'last.pt', weights_only=True)

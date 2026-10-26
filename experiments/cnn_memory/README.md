@@ -102,6 +102,9 @@ Run đầu dùng mặc định 10 epoch, seed 234, batch size 64 cho **mỗi** l
 
 ## Metric, checkpoint và resume
 
+- Train và test lại checkpoint gọi chung `experiments/topk_variants/test_ucf.py::test`, giữ luồng đánh giá UCF gốc: chia chunk/mask theo `visual_length`, cắt logits về độ dài hợp lệ, `sigmoid(C)`, `1-softmax(A)[Normal]`, repeat 16 và detection mAP tại IoU 0.1–0.5. Evaluator CNN chỉ chuyển logger và nhận đầy đủ metric; không còn vòng inference riêng hoặc tự bỏ chunk đệm. Cần cập nhật đồng bộ code CNN, MSC và `experiments/topk_variants/test_ucf.py` trong cùng checkout.
+- Text log dùng cùng cấu trúc các run Top-K trước: `epoch=e/N batch=b/M loss=... loss1=... loss2=... loss3=... lr=... peak_vram=...GB`. `loss1/2/3` tương ứng C, A và text separation. Dòng tiến độ ghi loss **batch hiện tại**; `epoch_summary` ghi trung bình đầy đủ toàn epoch. Loss phụ hiện riêng ở `loss_memory`, `weighted_memory` và các trường trung bình tương ứng.
+- AUC1/AP1 và AUC2/AP2 nằm ở hai dòng riêng, mỗi ngưỡng mAP một dòng, kết thúc bằng `average_mAP=...%`. Header ghi seed/device/GPU; marker `checkpoint_resumed` và `model_saved` dùng để đọc lại quá trình chạy. Đổi format text không thay đổi lịch train/eval hoặc dữ liệu checkpoint/JSON.
 - `train.log`, `config.json`, `metrics.jsonl`: cấu hình, lịch kích hoạt, loss, AUC1/AP1/AUC2/AP2 và mAP. mAP có đơn vị phần trăm; AUC/AP nằm trong `[0,1]`.
 - `best.pt`: checkpoint có **test AUC1 cao nhất từ epoch 3**, cho cả control và run mới. AUC2 được ghi cùng lần đánh giá, không chọn checkpoint riêng theo AUC2. Đây là best-test, không phải kết quả validation độc lập.
 - `last.pt`: cuối mỗi epoch, gồm optimizer, scheduler, RNG và trạng thái nhánh phụ. Dùng để resume ở epoch kế tiếp, không tiếp tục giữa epoch.
@@ -123,4 +126,4 @@ Có thể tăng `--max-epoch`; các cài đặt ảnh hưởng thí nghiệm đ�
 python -B -m unittest discover -s experiments/cnn_memory/tests -v
 ```
 
-17 kiểm tra CPU đã qua. Các kiểm tra dùng CLIP giả lập và thay DistanceAdj bằng ma trận đơn vị **chỉ trong fixture**, để kiểm tra forward nền, gradient, padding, phân nhánh và checkpoint. Một fixture khác chạy entrypoint train hai epoch với detector nhỏ trên CPU, xác nhận resume cho cùng weights và metrics như chạy liên tục. Chưa chạy CLIP pretrained/CUDA hoặc train toàn bộ UCF-Crime ở máy local. LGT gốc dùng CUDA nên các entrypoint train/evaluate thật yêu cầu GPU.
+18 kiểm tra CPU đã qua. Các kiểm tra dùng CLIP giả lập và thay DistanceAdj bằng ma trận đơn vị **chỉ trong fixture**, để kiểm tra forward nền, gradient, padding, phân nhánh và checkpoint. Một fixture khác chạy entrypoint train hai epoch với detector nhỏ trên CPU, xác nhận resume cho cùng weights và metrics như chạy liên tục; log từ fixture được đọc bằng mẫu parser cũ để kiểm tra epoch/batch, AUC và đơn vị mAP. Kiểm thử hồi quy evaluator dùng dữ liệu giả đủ 14 lớp, tính AUC/AP và mAP thật, xác nhận khớp evaluator `src/ucf_test.py` và Top-K về metric, softmax prediction, chunk, length và mask, gồm cả độ dài chia hết `visual_length`. Chưa chạy CLIP pretrained/CUDA hoặc train toàn bộ UCF-Crime ở máy local. LGT gốc dùng CUDA nên các entrypoint train/evaluate thật yêu cầu GPU.

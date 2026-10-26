@@ -67,7 +67,12 @@ def main():
         if not (output / "best.pt").is_file() and saved["best_metrics"]:
             raise FileNotFoundError("Keep best.pt beside last.pt when resuming")
     output.mkdir(parents=True, exist_ok=True)
+    device = training_device()
     logger = TrainingLogger(output / "train.log", append=bool(saved))
+    gpu_name = torch.cuda.get_device_name(device) if device == "cuda" else "none"
+    logger.log(f"device={device} amp=False epochs={args.max_epoch} seed={args.seed} "
+               f"batch_size={args.batch_size} accumulation=1 actions=all topk_pooling=mean "
+               f"experiment=cnn_memory gpu_name={gpu_name!r}")
     logger.log("experiment=cnn_memory data=" + json.dumps(summary))
     logger.log("args=" + json.dumps(vars(args), sort_keys=True))
     logger.log("pooling=original_hard_topk loss3=original_text_separation "
@@ -76,7 +81,6 @@ def main():
                "epoch_policy=continuous_training_no_best_reload")
     (output / "config.json").write_text(json.dumps(vars(args), indent=2) + "\n", encoding="utf-8")
 
-    device = training_device()
     setup_seed(args.seed)
     normal = UCFDataset(args.visual_length, args.train_list, False, LABEL_MAP, True)
     abnormal = UCFDataset(args.visual_length, args.train_list, False, LABEL_MAP, False)
@@ -84,6 +88,7 @@ def main():
     normal_loader = DataLoader(normal, batch_size=args.batch_size, shuffle=True, drop_last=True)
     abnormal_loader = DataLoader(abnormal, batch_size=args.batch_size, shuffle=True, drop_last=True)
     test_loader = DataLoader(test_data, batch_size=1, shuffle=False)
+    num_batches = min(len(normal_loader), len(abnormal_loader))
     config = model_config(args)
     model = build_model(config, device).to(device)
     memory_params = list(model.memory.parameters()) if model.memory is not None else []
@@ -107,14 +112,18 @@ def main():
         global_step = saved["global_step"]
         first_epoch = saved["epoch"] + 1
         restore_rng(saved["rng_state"])
-        logger.log(f"resume={args.resume} next_epoch={first_epoch} global_step={global_step}")
+        logger.log(f"checkpoint_resumed={args.resume} next_epoch={first_epoch} global_step={global_step}")
     del saved
+
+    def peak_vram():
+        return torch.cuda.max_memory_allocated(device) / 1024 ** 3 if device == "cuda" else 0.0
 
     def evaluate_and_save(epoch):
         nonlocal best_metrics
         rng = capture_rng()
         try:
-            metrics = evaluate(model, test_loader, prompt_text, gt, gtsegments, gtlabels, device, logger.log)
+            metrics = evaluate(model, test_loader, args.visual_length, prompt_text,
+                               gt, gtsegments, gtlabels, device, logger.log)
         finally:
             restore_rng(rng)
             model.train()
@@ -131,6 +140,8 @@ def main():
 
     for epoch in range(first_epoch, args.max_epoch + 1):
         model.train()
+        if device == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
         model.set_memory_active(epoch >= args.memory_start_epoch)
         logger.log(f"epoch={epoch} memory_active={bool(model.memory_active)} "
                    f"aux_branch={args.aux_branch} cnn_kernel={args.cnn_kernel} "
@@ -158,19 +169,42 @@ def main():
             global_step += 1
             for key, value in zip(totals, (loss_c, loss_a, loss_text, loss_memory)):
                 totals[key] += float(value.detach())
+            if batch_index % args.eval_steps == 0 or batch_index == num_batches:
+                # Match the existing trainer: current-batch losses here, full
+                # epoch means below. Formatting never changes the backward loss.
+                memory_lr = optimizer.param_groups[1]["lr"] if memory_params else 0.0
+                logger.log(
+                    f"epoch={epoch}/{args.max_epoch} batch={batch_index}/{num_batches} "
+                    f"loss={loss.item():.4f} loss1={loss_c.item():.4f} "
+                    f"loss2={loss_a.item():.4f} loss3={loss_text.item():.4f} "
+                    f"loss_memory={loss_memory.item():.6f} "
+                    f"weighted_memory={args.memory_loss_weight * loss_memory.item():.6f} "
+                    f"lr={optimizer.param_groups[0]['lr']:.2e} memory_lr={memory_lr:.2e} "
+                    f"global_step={global_step} peak_vram={peak_vram():.2f}GB"
+                )
             if batch_index % args.eval_steps == 0:
-                logger.log(f"epoch={epoch} batch={batch_index} global_step={global_step} " +
-                           " ".join(f"{key}={value / batch_index:.6f}" for key, value in totals.items()))
                 evaluate_and_save(epoch)
                 last_eval_step = global_step
         if global_step != last_eval_step:
             evaluate_and_save(epoch)
+        average_total = (totals["loss_c"] + totals["loss_a"] + totals["loss_text"] +
+                         args.memory_loss_weight * totals["loss_memory"]) / num_batches
+        logger.log(
+            f"epoch_summary={epoch}/{args.max_epoch} batches={num_batches} "
+            f"avg_loss1={totals['loss_c'] / num_batches:.4f} "
+            f"avg_loss2={totals['loss_a'] / num_batches:.4f} "
+            f"avg_loss3={totals['loss_text'] / num_batches:.4f} "
+            f"avg_loss_memory={totals['loss_memory'] / num_batches:.6f} "
+            f"avg_weighted_memory={args.memory_loss_weight * totals['loss_memory'] / num_batches:.6f} "
+            f"avg_loss={average_total:.4f} peak_vram={peak_vram():.2f}GB"
+        )
         scheduler.step()
         payload = checkpoint_payload(model, config, args, epoch, global_step, best_metrics, "last")
         payload.update(optimizer_state_dict=optimizer.state_dict(),
                        scheduler_state_dict=scheduler.state_dict(), rng_state=capture_rng())
         torch.save(payload, output / "last.pt")
         logger.log(f"completed_epoch={epoch} saved_last={output / 'last.pt'}")
+    logger.log(f"model_saved={output / 'best.pt'}")
     logger.log("training_complete best_test_metrics=" + json.dumps(best_metrics))
 
 

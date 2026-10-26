@@ -44,9 +44,11 @@ def main():
     dataset = UCFDataset(checkpoint["model_config"]["visual_length"], args.test_list, True, LABEL_MAP)
     loader = DataLoader(dataset, batch_size=1, shuffle=False)
     logger = TrainingLogger(args.log_path)
-    logger.log(f"checkpoint={args.checkpoint} epoch={checkpoint['epoch']} "
+    logger.log(f"evaluation_model={args.checkpoint} clips={len(dataset)} actions=all "
+               f"device={device} epoch={checkpoint['epoch']} "
                f"memory_active={bool(model.memory_active)} config={json.dumps(checkpoint['model_config'])}")
-    evaluate(model, loader, get_prompt_text(LABEL_MAP), np.load(args.gt_path),
+    evaluate(model, loader, checkpoint["model_config"]["visual_length"],
+             get_prompt_text(LABEL_MAP), np.load(args.gt_path),
              np.load(args.gt_segment_path, allow_pickle=True),
              np.load(args.gt_label_path, allow_pickle=True), device, logger.log)
 
