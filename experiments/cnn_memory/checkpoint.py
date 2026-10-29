@@ -39,4 +39,5 @@ def checkpoint_payload(model, config, args, epoch, global_step, best_metrics, ki
         "model_config": config, "train_args": vars(args).copy(),
         "model_state_dict": model.state_dict(), "epoch": epoch,
         "global_step": global_step, "best_metrics": best_metrics,
+        "pretraining_info": getattr(model, "pretraining_info", None),
     }

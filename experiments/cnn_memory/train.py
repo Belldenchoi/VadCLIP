@@ -1,6 +1,7 @@
 """Train the isolated CNN-memory experiment; no changes to src are needed."""
 
 import json
+import hashlib
 from pathlib import Path
 
 try:
@@ -30,15 +31,21 @@ def main():
         print("Preflight passed. CLIP was not loaded; no training was executed.")
         return
 
+    if (args.aux_mode == "future_mse" and args.aux_branch != "none" and not args.resume
+            and not Path(args.pretrained_cnn).is_file()):
+        raise FileNotFoundError(f"Run pretrain.py first; missing CNN encoder: {args.pretrained_cnn}")
+
     try:
         from . import bootstrap
         from .checkpoint import capture_rng, checkpoint_payload, load_checkpoint, restore_rng
         from .cnn_memory_model import build_model
+        from .future_features import future_feature_mse
         from .evaluation import evaluate
     except ImportError:
         import bootstrap
         from checkpoint import capture_rng, checkpoint_payload, load_checkpoint, restore_rng
         from cnn_memory_model import build_model
+        from future_features import future_feature_mse
         from evaluation import evaluate
 
     import numpy as np
@@ -57,7 +64,11 @@ def main():
     if saved:
         if saved["kind"] != "last":
             raise ValueError("Resume requires last.pt, which includes optimizer, scheduler and RNG state")
-        changed = [key for key in RESUME_KEYS if saved["train_args"][key] != getattr(args, key)]
+        changed = [key for key in RESUME_KEYS
+                   if saved["train_args"].get(key, "prototype" if key == "aux_mode" else None) != getattr(args, key)]
+        if args.aux_mode == "future_mse_joint":
+            changed.extend(key for key in ("future_horizon", "mse_loss_weight")
+                           if saved["train_args"].get(key) != getattr(args, key))
         if changed:
             raise ValueError(f"Resume configuration differs for: {', '.join(changed)}")
         if saved["epoch"] >= args.max_epoch:
@@ -72,7 +83,7 @@ def main():
     gpu_name = torch.cuda.get_device_name(device) if device == "cuda" else "none"
     logger.log(f"device={device} amp=False epochs={args.max_epoch} seed={args.seed} "
                f"batch_size={args.batch_size} accumulation=1 actions=all topk_pooling=mean "
-               f"experiment=cnn_memory gpu_name={gpu_name!r}")
+               f"experiment=cnn_memory aux_mode={args.aux_mode} gpu_name={gpu_name!r}")
     logger.log("experiment=cnn_memory data=" + json.dumps(summary))
     logger.log("args=" + json.dumps(vars(args), sort_keys=True))
     logger.log("pooling=original_hard_topk loss3=original_text_separation "
@@ -91,7 +102,22 @@ def main():
     num_batches = min(len(normal_loader), len(abnormal_loader))
     config = model_config(args)
     model = build_model(config, device).to(device)
-    memory_params = list(model.memory.parameters()) if model.memory is not None else []
+    if args.aux_mode == "future_mse_joint":
+        logger.log(f"joint_training=True encoder_frozen=False future_horizon={args.future_horizon} "
+                   f"mse_loss_weight={args.mse_loss_weight} predictor_evaluation=False")
+    if args.aux_mode == "future_mse" and model.memory is not None and not saved:
+        try:
+            from .future_features import load_pretrained_encoder
+        except ImportError:
+            from future_features import load_pretrained_encoder
+        model.pretraining_info = load_pretrained_encoder(model.memory, args.pretrained_cnn, args.visual_length)
+        logger.log("future_pretraining=" + json.dumps(model.pretraining_info))
+    if args.aux_mode == "future_mse" and model.memory is not None:
+        info = saved.get("pretraining_info") if saved else model.pretraining_info
+        csv_hash = hashlib.sha256(Path(args.train_list).read_bytes()).hexdigest()
+        if not info or info["train_csv_sha256"] != csv_hash:
+            raise ValueError("MSE pretraining and detection must use the same training CSV contents")
+    memory_params = [p for p in model.memory.parameters() if p.requires_grad] if model.memory is not None else []
     memory_ids = {id(param) for param in memory_params}
     base_params = [param for param in model.parameters() if param.requires_grad and id(param) not in memory_ids]
     groups = [{"params": base_params, "lr": args.lr}]
@@ -106,6 +132,7 @@ def main():
     best_metrics, global_step, first_epoch = {}, 0, 1
     if saved:
         model.load_state_dict(saved["model_state_dict"], strict=True)
+        model.pretraining_info = saved.get("pretraining_info")
         optimizer.load_state_dict(saved["optimizer_state_dict"])
         scheduler.load_state_dict(saved["scheduler_state_dict"])
         best_metrics = saved["best_metrics"]
@@ -144,9 +171,10 @@ def main():
             torch.cuda.reset_peak_memory_stats(device)
         model.set_memory_active(epoch >= args.memory_start_epoch)
         logger.log(f"epoch={epoch} memory_active={bool(model.memory_active)} "
-                   f"aux_branch={args.aux_branch} cnn_kernel={args.cnn_kernel} "
+                   f"aux_branch={args.aux_branch} aux_mode={args.aux_mode} cnn_kernel={args.cnn_kernel} "
                    f"learning_rates={[group['lr'] for group in optimizer.param_groups]}")
-        totals = {key: 0.0 for key in ("loss_c", "loss_a", "loss_text", "loss_memory")}
+        totals = {key: 0.0 for key in ("loss_c", "loss_a", "loss_text", "loss_memory", "loss_mse")}
+        epoch_mse_pairs = 0
         last_eval_step = -1
         for batch_index, (normal_item, abnormal_item) in enumerate(zip(normal_loader, abnormal_loader), 1):
             features = torch.cat((normal_item[0], abnormal_item[0])).to(device)
@@ -160,15 +188,23 @@ def main():
             loss_memory = features.new_zeros(())
             if auxiliary is not None and args.memory_loss_weight:
                 loss_memory = CLAS2(auxiliary["memory_logits"], labels, lengths, device)
-            loss = loss_c + loss_a + loss_text + args.memory_loss_weight * loss_memory
+            loss_mse, mse_pairs = features.new_zeros(()), 0
+            if auxiliary is not None and args.aux_mode == "future_mse_joint" and args.mse_loss_weight:
+                loss_mse, mse_pairs = future_feature_mse(
+                    auxiliary["future_predictions"], features, lengths,
+                    args.future_horizon, allow_empty=True,
+                )
+            loss = (loss_c + loss_a + loss_text + args.memory_loss_weight * loss_memory
+                    + args.mse_loss_weight * loss_mse)
             if not bool(torch.isfinite(loss)):
                 raise FloatingPointError(f"Non-finite loss at epoch={epoch}, batch={batch_index}")
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
             global_step += 1
-            for key, value in zip(totals, (loss_c, loss_a, loss_text, loss_memory)):
+            for key, value in zip(totals, (loss_c, loss_a, loss_text, loss_memory, loss_mse)):
                 totals[key] += float(value.detach())
+            epoch_mse_pairs += mse_pairs
             if batch_index % args.eval_steps == 0 or batch_index == num_batches:
                 # Match the existing trainer: current-batch losses here, full
                 # epoch means below. Formatting never changes the backward loss.
@@ -179,6 +215,8 @@ def main():
                     f"loss2={loss_a.item():.4f} loss3={loss_text.item():.4f} "
                     f"loss_memory={loss_memory.item():.6f} "
                     f"weighted_memory={args.memory_loss_weight * loss_memory.item():.6f} "
+                    f"loss_mse={loss_mse.item():.6f} weighted_mse={args.mse_loss_weight * loss_mse.item():.6f} "
+                    f"mse_pairs={mse_pairs} "
                     f"lr={optimizer.param_groups[0]['lr']:.2e} memory_lr={memory_lr:.2e} "
                     f"global_step={global_step} peak_vram={peak_vram():.2f}GB"
                 )
@@ -188,7 +226,8 @@ def main():
         if global_step != last_eval_step:
             evaluate_and_save(epoch)
         average_total = (totals["loss_c"] + totals["loss_a"] + totals["loss_text"] +
-                         args.memory_loss_weight * totals["loss_memory"]) / num_batches
+                         args.memory_loss_weight * totals["loss_memory"] +
+                         args.mse_loss_weight * totals["loss_mse"]) / num_batches
         logger.log(
             f"epoch_summary={epoch}/{args.max_epoch} batches={num_batches} "
             f"avg_loss1={totals['loss_c'] / num_batches:.4f} "
@@ -196,6 +235,9 @@ def main():
             f"avg_loss3={totals['loss_text'] / num_batches:.4f} "
             f"avg_loss_memory={totals['loss_memory'] / num_batches:.6f} "
             f"avg_weighted_memory={args.memory_loss_weight * totals['loss_memory'] / num_batches:.6f} "
+            f"avg_loss_mse={totals['loss_mse'] / num_batches:.6f} "
+            f"avg_weighted_mse={args.mse_loss_weight * totals['loss_mse'] / num_batches:.6f} "
+            f"mse_pairs={epoch_mse_pairs} "
             f"avg_loss={average_total:.4f} peak_vram={peak_vram():.2f}GB"
         )
         scheduler.step()

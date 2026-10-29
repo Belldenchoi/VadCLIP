@@ -3,6 +3,17 @@
 Thí nghiệm độc lập, không sửa `src/` và không sửa các thí nghiệm cũ.
 Đây là code thử nghiệm; chưa có kết quả huấn luyện Kaggle hoặc bằng chứng tăng AUC.
 
+**Bản mới học chung `future_mse_joint`:** xem [JOINT_MSE.md](JOINT_MSE.md).
+CNN, đầu chấm điểm và đầu dự đoán tương lai được học trong cùng batch với C/A;
+không cần pretrain riêng hoặc đóng băng encoder. Dùng notebook và setup cũ,
+không tạo notebook mới; evaluator gốc được giữ nguyên.
+
+**Biến thể hai giai đoạn `future_mse`:** dùng notebook Kaggle và các cell setup/CSV cũ,
+chạy các lệnh trong [FUTURE_MSE.md](FUTURE_MSE.md). Học CNN nhân quả trước LGT bằng
+MSE dự đoán feature CLIP tương lai, bỏ đầu dự đoán, đóng băng encoder rồi học đầu
+bổ trợ C/A. Không dùng prototype/cosine trong nhánh mới. Mặc định `prototype`
+vẫn chạy thí nghiệm cũ được mô tả bên dưới; lệnh cũ/checkpoint cũ vẫn được hỗ trợ.
+
 ## Kiến trúc và cách học
 
 ```text
