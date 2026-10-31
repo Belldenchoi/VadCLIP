@@ -178,6 +178,7 @@ class JointEntrypointTests(unittest.TestCase):
             common = ["--train-list", str(csv), "--test-list", str(csv), "--gt-path", str(gt),
                       "--gt-segment-path", str(segments), "--gt-label-path", str(labels),
                       "--aux-mode", "future_mse_joint", "--batch-size", "1", "--visual-length", "8",
+                      "--input-features", "post_lgt",
                       "--attn-window", "4", "--feature-dim", "6", "--eval-steps", "1", "--memory-start-epoch", "1"]
             initial = {}
 
@@ -201,6 +202,7 @@ class JointEntrypointTests(unittest.TestCase):
             run(root / "resumed", 2, resume=True)
             expected = load_checkpoint(root / "continuous/last.pt")
             actual = load_checkpoint(root / "resumed/last.pt")
+            self.assertEqual(actual["model_config"]["input_features"], "post_lgt")
             self.assertIsNone(actual["pretraining_info"])
             self.assertEqual(actual["best_metrics"], expected["best_metrics"])
             for key, tensor in actual["model_state_dict"].items():
@@ -209,6 +211,8 @@ class JointEntrypointTests(unittest.TestCase):
                                 for key, value in initial.items()))
             logs = (root / "continuous/train.log").read_text()
             self.assertIn("encoder_frozen=False", logs)
+            self.assertIn("online_lgt=False", logs)
+            self.assertIn("mse_target=post_lgt_feature", logs)
             self.assertEqual(logs.count("mse_pairs=11"), 4)  # Batch and summary for both epochs.
             self.assertIn("avg_loss_mse=", logs)
             for line in logs.splitlines():
@@ -219,6 +223,8 @@ class JointEntrypointTests(unittest.TestCase):
                                            ('loss1', 'loss2', 'loss3', 'weighted_memory', 'weighted_mse')), delta=.0004)
             with self.assertRaises(ValueError):
                 run(root / "resumed", 3, resume=True, extra=("--future-horizon", "2"))
+            with self.assertRaisesRegex(ValueError, "input_features"):
+                run(root / "resumed", 3, resume=True, extra=("--input-features", "clip"))
 
     def test_joint_markdown_commands_match_cli_and_use_no_pretrain(self):
         markdown = (REPO / "experiments/cnn_memory/JOINT_MSE.md").read_text(encoding="utf-8")
@@ -238,6 +244,7 @@ class JointEntrypointTests(unittest.TestCase):
                     args = training_parser().parse_args(tokens[3:])
                     validate_args(args)
                     self.assertEqual(args.aux_mode, 'future_mse_joint')
+                    self.assertEqual(args.input_features, 'post_lgt')
                     self.assertIsNone(args.pretrained_cnn)
                     self.assertEqual(args.memory_start_epoch, 1)
                 else:

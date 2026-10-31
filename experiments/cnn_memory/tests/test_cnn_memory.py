@@ -293,6 +293,11 @@ class ModelIntegrationTests(unittest.TestCase):
             uninterrupted, resumed = root / "continuous", root / "resumed"
             run(uninterrupted, 2)
             run(resumed, 1)
+            # Older checkpoints have no feature-domain field and must stay CLIP-input runs.
+            legacy = load_checkpoint(resumed / "last.pt")
+            legacy["train_args"].pop("input_features")
+            legacy["model_config"].pop("input_features")
+            torch.save(legacy, resumed / "last.pt")
             run(resumed, 2, resume=True)
             expected = load_checkpoint(uninterrupted / "last.pt")
             actual = load_checkpoint(resumed / "last.pt")

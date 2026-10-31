@@ -55,6 +55,8 @@ def training_parser():
     parser.add_argument("--aux-branch", choices=("none", "c", "a", "both"), default="both")
     parser.add_argument("--aux-mode", choices=("prototype", "future_mse", "future_mse_joint"), default="prototype",
                         help="Prototype memory, frozen pretrained CNN, or jointly trained CNN + future-feature MSE")
+    parser.add_argument("--input-features", choices=("clip", "post_lgt"), default="clip",
+                        help="clip runs the original LGT; post_lgt uses cached LGT outputs directly for C/A and CNN")
     parser.add_argument("--pretrained-cnn", help="Stage-1 encoder.pt; required for a fresh future_mse run")
     parser.add_argument("--future-horizon", type=int, default=1,
                         help="Future target offset on the feature grid in future_mse_joint mode")
@@ -106,6 +108,8 @@ def validate_args(args):
 
 def model_config(args):
     config = {key: getattr(args, key) for key in MODEL_KEYS}
+    # Keep the keys shared with older experiments unchanged.
+    config["input_features"] = args.input_features
     if args.aux_mode == "future_mse_joint":
         config["future_horizon"] = args.future_horizon
     return config

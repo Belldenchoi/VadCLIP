@@ -37,7 +37,7 @@ def main():
     validate_data(args, training=False)
     checkpoint = load_checkpoint(args.checkpoint)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    if device != "cuda":
+    if device != "cuda" and checkpoint["model_config"].get("input_features", "clip") == "clip":
         raise RuntimeError("The original LGT DistanceAdj uses CUDA. Enable a Kaggle GPU.")
     model = build_model(checkpoint["model_config"], device).to(device)
     model.load_state_dict(checkpoint["model_state_dict"], strict=True)

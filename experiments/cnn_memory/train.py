@@ -10,9 +10,11 @@ except ImportError:
     from config import LABEL_MAP, RESUME_KEYS, model_config, training_parser, validate_args
 
 
-def training_device():
+def training_device(input_features="clip"):
     import torch
     if not torch.cuda.is_available():
+        if input_features == "post_lgt":
+            return "cpu"
         raise RuntimeError("The original LGT DistanceAdj uses CUDA. Enable a Kaggle GPU before training.")
     return "cuda"
 
@@ -66,6 +68,8 @@ def main():
             raise ValueError("Resume requires last.pt, which includes optimizer, scheduler and RNG state")
         changed = [key for key in RESUME_KEYS
                    if saved["train_args"].get(key, "prototype" if key == "aux_mode" else None) != getattr(args, key)]
+        if saved["train_args"].get("input_features", "clip") != args.input_features:
+            changed.append("input_features")
         if args.aux_mode == "future_mse_joint":
             changed.extend(key for key in ("future_horizon", "mse_loss_weight")
                            if saved["train_args"].get(key) != getattr(args, key))
@@ -78,12 +82,13 @@ def main():
         if not (output / "best.pt").is_file() and saved["best_metrics"]:
             raise FileNotFoundError("Keep best.pt beside last.pt when resuming")
     output.mkdir(parents=True, exist_ok=True)
-    device = training_device()
+    device = training_device(args.input_features)
     logger = TrainingLogger(output / "train.log", append=bool(saved))
     gpu_name = torch.cuda.get_device_name(device) if device == "cuda" else "none"
     logger.log(f"device={device} amp=False epochs={args.max_epoch} seed={args.seed} "
                f"batch_size={args.batch_size} accumulation=1 actions=all topk_pooling=mean "
-               f"experiment=cnn_memory aux_mode={args.aux_mode} gpu_name={gpu_name!r}")
+               f"experiment=cnn_memory aux_mode={args.aux_mode} input_features={args.input_features} "
+               f"lgt_applied={args.input_features == 'clip'} gpu_name={gpu_name!r}")
     logger.log("experiment=cnn_memory data=" + json.dumps(summary))
     logger.log("args=" + json.dumps(vars(args), sort_keys=True))
     logger.log("pooling=original_hard_topk loss3=original_text_separation "
@@ -102,9 +107,13 @@ def main():
     num_batches = min(len(normal_loader), len(abnormal_loader))
     config = model_config(args)
     model = build_model(config, device).to(device)
+    if args.input_features == "post_lgt":
+        logger.log("cached_lgt_features=True online_lgt=False lgt_trainable=False "
+                   "ca_and_cnn_share_input=True")
     if args.aux_mode == "future_mse_joint":
         logger.log(f"joint_training=True encoder_frozen=False future_horizon={args.future_horizon} "
-                   f"mse_loss_weight={args.mse_loss_weight} predictor_evaluation=False")
+                   f"mse_loss_weight={args.mse_loss_weight} predictor_evaluation=False "
+                   f"mse_target={args.input_features}_feature")
     if args.aux_mode == "future_mse" and model.memory is not None and not saved:
         try:
             from .future_features import load_pretrained_encoder

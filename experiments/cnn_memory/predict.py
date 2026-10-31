@@ -68,11 +68,11 @@ def main():
     import torch
     from utils.tools import get_batch_mask, get_prompt_text
 
-    if not torch.cuda.is_available():
-        raise RuntimeError("The original LGT DistanceAdj requires CUDA")
-    device = "cuda"
     checkpoint = load_checkpoint(args.checkpoint)
     config = checkpoint["model_config"]
+    if not torch.cuda.is_available() and config.get("input_features", "clip") == "clip":
+        raise RuntimeError("The original LGT DistanceAdj requires CUDA")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model = build_model(config, device).to(device)
     model.load_state_dict(checkpoint["model_state_dict"], strict=True)
     model.eval()
@@ -82,7 +82,7 @@ def main():
         for row in rows:
             feature = np.load(row["path"], allow_pickle=False)
             if feature.ndim != 2 or feature.shape[1] != 512 or not len(feature) or not np.isfinite(feature).all():
-                raise ValueError(f"Invalid CLIP features: {row['path']}")
+                raise ValueError(f"Invalid 512-D video features: {row['path']}")
             count = (len(feature) + maxlen - 1) // maxlen
             chunks = np.zeros((count, maxlen, 512), dtype=np.float32)
             chunks.reshape(-1, 512)[:len(feature)] = feature

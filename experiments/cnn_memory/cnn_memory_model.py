@@ -1,4 +1,4 @@
-"""Add logit residuals without changing the original LGT or Visual Prompt."""
+"""Add logit residuals; optionally consume cached LGT outputs directly."""
 
 import torch
 import torch.nn.functional as F
@@ -6,20 +6,30 @@ import torch.nn.functional as F
 try:
     from . import bootstrap
     from .cnn_memory import CNNVisualMemory
-    from .future_features import FutureFeatureAuxiliary, JointFutureFeatureAuxiliary
+    from .future_features import FutureFeatureAuxiliary, JointFutureFeatureAuxiliary, valid_steps
 except ImportError:
     import bootstrap
     from cnn_memory import CNNVisualMemory
-    from future_features import FutureFeatureAuxiliary, JointFutureFeatureAuxiliary
+    from future_features import FutureFeatureAuxiliary, JointFutureFeatureAuxiliary, valid_steps
 
 from model import CLIPVAD
 
 
 class CNNMemoryCLIPVAD(CLIPVAD):
+    LGT_MODULES = ("temporal", "gc1", "gc2", "gc3", "gc4", "disAdj", "linear",
+                   "frame_position_embeddings")
+
     def __init__(self, *args, aux_branch="both", cnn_kernel=3, feature_dim=256,
                  memory_slots=8, memory_temperature=0.1, residual_scale=0.1,
-                 aux_mode="prototype", **kwargs):
+                 aux_mode="prototype", input_features="clip", **kwargs):
         super().__init__(*args, **kwargs)
+        if input_features not in ("clip", "post_lgt"):
+            raise ValueError("Unknown input feature kind")
+        self.input_features = input_features
+        if input_features == "post_lgt":
+            # Retain state-dict compatibility, but never optimize the unused LGT.
+            for name in self.LGT_MODULES:
+                getattr(self, name).requires_grad_(False)
         if aux_branch not in ("none", "c", "a", "both"):
             raise ValueError("Unknown auxiliary branch")
         self.aux_branch = aux_branch
@@ -52,26 +62,41 @@ class CNNMemoryCLIPVAD(CLIPVAD):
 
     def forward(self, visual, padding_mask, text, lengths, return_aux=False,
                 return_shared_features=False):
-        # Same ordinary forward as CLIPVAD; no auxiliary interfaces in src required.
-        features = self.encode_video(visual, padding_mask, lengths)
+        if self.input_features == "post_lgt":
+            if visual.ndim != 3 or visual.shape[-1] != self.visual_width:
+                raise ValueError(f"Expected cached LGT features [B,T,{self.visual_width}]")
+            valid = valid_steps(visual, lengths)
+            features = visual.float().masked_fill(~valid[..., None], 0)
+        else:
+            # Preserve the original forward for CLIP inputs and old checkpoints.
+            features = self.encode_video(visual, padding_mask, lengths)
         logits_c = self.classifier(features + self.mlp2(features))
         text_original = self.encode_textprompt(text)
         visual_attention = logits_c.permute(0, 2, 1) @ features
-        visual_attention = visual_attention / visual_attention.norm(dim=-1, keepdim=True)
+        if self.input_features == "post_lgt":
+            # Cached padding and all-padding test chunks can be exactly zero.
+            visual_attention = F.normalize(visual_attention, dim=-1, eps=1e-6)
+        else:
+            visual_attention = visual_attention / visual_attention.norm(dim=-1, keepdim=True)
         text_features = text_original.unsqueeze(0) + visual_attention.expand(
             visual_attention.shape[0], text_original.shape[0], visual_attention.shape[2]
         )
         text_features = text_features + self.mlp1(text_features)
-        normalized_video = features / features.norm(dim=-1, keepdim=True)
-        normalized_text = text_features / text_features.norm(dim=-1, keepdim=True)
+        if self.input_features == "post_lgt":
+            normalized_video = F.normalize(features, dim=-1, eps=1e-6)
+            normalized_text = F.normalize(text_features, dim=-1, eps=1e-6)
+        else:
+            normalized_video = features / features.norm(dim=-1, keepdim=True)
+            normalized_text = text_features / text_features.norm(dim=-1, keepdim=True)
         logits_a = normalized_video @ normalized_text.permute(0, 2, 1).type(normalized_video.dtype) / 0.07
 
         auxiliary = None
         if self.memory is not None and bool(self.memory_active):
+            memory_input = features if self.input_features == "post_lgt" or self.aux_mode == "prototype" else visual
             if self.aux_mode == "future_mse_joint":
-                auxiliary = self.memory(visual, lengths, return_prediction=return_aux)
+                auxiliary = self.memory(memory_input, lengths, return_prediction=return_aux)
             else:
-                auxiliary = self.memory(visual if self.aux_mode == "future_mse" else features, lengths)
+                auxiliary = self.memory(memory_input, lengths)
             # Visual Prompt above always consumes the original C logits.
             if self.aux_branch in ("c", "both"):
                 logits_c = logits_c + self.residual_scale * auxiliary["delta_c"]
@@ -92,4 +117,5 @@ def build_model(config, device):
             "memory_temperature", "residual_scale",
         )},
         aux_mode=config.get("aux_mode", "prototype"),
+        input_features=config.get("input_features", "clip"),
     )
