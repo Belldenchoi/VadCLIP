@@ -54,8 +54,9 @@ def training_parser():
     parser.add_argument("--aux-branch", choices=("none", "c"), default="c",
                         help="c enables GRF; none runs the matched E0 control")
     parser.add_argument("--aux-mode", choices=("gated_residual",), default="gated_residual")
-    parser.add_argument("--input-features", choices=("clip", "post_lgt"), default="post_lgt",
-                        help="clip runs the original LGT; post_lgt uses cached LGT outputs directly for C/A and CNN")
+    parser.add_argument("--input-features", choices=("clip", "post_lgt"), default="clip",
+                        help="clip is for the authors' released CLIP features and runs LGT; "
+                             "post_lgt is only for features explicitly exported from encode_video")
     parser.add_argument("--cnn-kernel", type=int, default=3,
                         help="Fixed at 3 in the agreed baseline v1")
     parser.add_argument("--cnn-channels", type=int, default=128,

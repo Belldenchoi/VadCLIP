@@ -20,7 +20,7 @@ class CNNMemoryCLIPVAD(CLIPVAD):
                    "frame_position_embeddings")
 
     def __init__(self, *args, aux_branch="c", cnn_kernel=3,
-                 aux_mode="gated_residual", input_features="post_lgt", cnn_channels=128, **kwargs):
+                 aux_mode="gated_residual", input_features="clip", cnn_channels=128, **kwargs):
         super().__init__(*args, **kwargs)
         if input_features not in ("clip", "post_lgt"):
             raise ValueError("Unknown input feature kind")

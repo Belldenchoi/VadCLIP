@@ -8,6 +8,7 @@ Code nằm trong thí nghiệm `cnn_memory`; không sửa `src/` hoặc notebook
 ## Cách làm
 
 ```text
+Feature CLIP .npy tải sẵn -> LGT gốc -> H
 H sau LGT [B,T,512] ---------------------------> A gốc
      |
      +-> Conv1D(512,128,k3,s1,d1,p1) -> GELU
@@ -51,10 +52,17 @@ thay đổi gián tiếp, dù A không nhận H_enhanced hoặc gradient trực 
 
 ## Đầu vào và loss
 
-Người dùng xác nhận `.npy` đã xuất sau LGT: mặc định `--input-features post_lgt`.
-H được cấp trực tiếp cho C/A và CNN; không chạy LGT lần nữa. LGT offline không
-được cập nhật. Nếu dùng feature CLIP chưa qua LGT, chọn `--input-features clip`;
-CNN vẫn được gắn sau LGT online, gradient C có thể đi qua shared LGT.
+Dataset tải từ repo gốc là **feature CLIP trước LGT**, như
+[README tác giả](https://github.com/nwpu-zxr/VadCLIP#setup) mô tả. Trong
+[forward gốc](https://github.com/nwpu-zxr/VadCLIP/blob/main/src/model.py), feature
+còn đi qua `encode_video()` (temporal Transformer và graph). Vì vậy mặc định
+và lệnh Kaggle dùng **`--input-features clip`**: LGT được học chung với C/A/CNN.
+CNN vẫn nhận H sau LGT; không chạy CLIP image encoder lại trên video thô.
+
+`--input-features post_lgt` chỉ dùng cho `.npy` tự xuất trực tiếp từ
+`encode_video()` của một checkpoint. Chế độ đó bỏ qua và đóng băng LGT online.
+Hai loại feature có thể đều 512 chiều; shape không xác định được loại đầu vào.
+Tên CSV giống nhau cũng không chứng minh file bên trong đã qua LGT.
 
 ```text
 loss = CLAS2(logits_C, video_labels)
@@ -70,8 +78,8 @@ CNN/projection/gate nằm cùng nhóm optimizer và cùng LR với các đầu g
 
 ## Cell train Kaggle — E2
 
-Giữ notebook/setup/CSV/GT đang có, bật GPU và Internet. Hai CSV cần trỏ đúng
-feature sau LGT đã xuất, giữ thứ tự và độ phân giải thời gian khớp GT.
+Giữ notebook/setup/CSV/GT đang có, bật GPU và Internet. Hai CSV trỏ tới feature
+CLIP tải sẵn, giữ thứ tự và độ phân giải thời gian khớp GT.
 Chỉ thay cell train cuối; mỗi khối dưới là một cell, một dấu ! ở đầu.
 
 ```python
@@ -83,25 +91,26 @@ python -u experiments/cnn_memory/train.py \
   --gt-path list/gt_ucf.npy \
   --gt-segment-path list/gt_segment_ucf.npy \
   --gt-label-path list/gt_label_ucf.npy \
-  --input-features post_lgt \
+  --input-features clip \
   --aux-branch c \
   --cnn-kernel 3 --cnn-channels 128 \
   --cnn-start-epoch 1 \
   --lr 2e-5 --seed 234 --batch-size 64 --max-epoch 10 \
-  --output-dir outputs/cnn_grf_c_k3_ch128_s234_20261102_r2
+  --output-dir outputs/cnn_grf_clip_c_k3_ch128_s234_20261102_r3
 ```
 
 `--cnn-start-epoch` mặc định 1: CNN/gate học ngay từ epoch đầu cùng C/A.
 Trainer tự evaluate mỗi 10 update và cuối epoch bằng evaluator chung với Top-K/gốc.
 Log mới có `feature_fusion=gated_residual`, `conv_layers=1`, `cnn_channels=128`,
 `objective=vadclip_original`, `auxiliary_classifier=False mse=False`,
-`a_features=original_h visual_prompt_weights=original_c`.
+`a_features=original_h visual_prompt_weights=original_c`, `lgt_applied=True`,
+`online_lgt=True lgt_trainable=True`.
 
 ## Cell đối chứng — E0
 
 Giữ mode, dữ liệu, input type, LR, seed, lịch eval và thời điểm chọn checkpoint;
-chỉ đặt `--aux-branch none` để không tạo CNN/gate. Đây là baseline trên cùng
-dataset cached sau LGT, không thêm LGT online.
+chỉ đặt `--aux-branch none` để không tạo CNN/gate. Đây là baseline cùng dataset
+feature CLIP, có LGT online như E2.
 
 ```python
 !cd /kaggle/working/VadCLIP && \
@@ -111,12 +120,12 @@ python -u experiments/cnn_memory/train.py \
   --gt-path list/gt_ucf.npy \
   --gt-segment-path list/gt_segment_ucf.npy \
   --gt-label-path list/gt_label_ucf.npy \
-  --input-features post_lgt \
+  --input-features clip \
   --aux-branch none \
   --cnn-kernel 3 --cnn-channels 128 \
   --cnn-start-epoch 1 \
   --lr 2e-5 --seed 234 --batch-size 64 --max-epoch 10 \
-  --output-dir outputs/cnn_grf_e0_s234_20261102_r2
+  --output-dir outputs/cnn_grf_clip_e0_s234_20261102_r3
 ```
 
 E1 bỏ gate, các kernel 5/7 và các hướng mở rộng khác trong bản thiết kế chưa
@@ -131,15 +140,17 @@ python -u experiments/cnn_memory/evaluate.py \
   --gt-path list/gt_ucf.npy \
   --gt-segment-path list/gt_segment_ucf.npy \
   --gt-label-path list/gt_label_ucf.npy \
-  --checkpoint outputs/cnn_grf_c_k3_ch128_s234_20261102_r2/best.pt \
-  --log-path outputs/cnn_grf_c_k3_ch128_s234_20261102_r2/evaluate.log
+  --checkpoint outputs/cnn_grf_clip_c_k3_ch128_s234_20261102_r3/best.pt \
+  --log-path outputs/cnn_grf_clip_c_k3_ch128_s234_20261102_r3/evaluate.log
 ```
 
 Evaluate/predict đọc mode, input type, cnn_channels và phase từ checkpoint;
 CNN/gate tiếp tục chạy tại inference. Không có đầu tương lai cần bỏ đi.
 `last.pt` chứa optimizer, scheduler và RNG để resume đúng run.
 Không resume checkpoint memory/MSE bằng GRF hoặc đổi cnn_channels/input type.
-Run mới cần output trống; tăng hậu tố `r2` nếu đã có kết quả.
+Run mới cần output trống; tăng hậu tố `r3` nếu đã có kết quả.
+Không đổi loại đầu vào rồi resume `last.pt` của run `post_lgt`: hãy train run mới.
+Evaluate vẫn đọc loại đầu vào đã lưu, để tái hiện đúng checkpoint cũ.
 
 Đã xóa implementation, pretrain, loss, cờ CLI và hướng dẫn chạy của các mode
 `prototype`, `future_mse`, `future_mse_joint` khỏi `cnn_memory`. Lệnh cũ có các
@@ -155,4 +166,6 @@ cũ rồi thay cell train bằng lệnh trong tài liệu này. Code cũ có tro
 Evaluator vẫn dùng raw score, repeat 16, AUC1/AP1, AUC2/AP2 và mAP; không video gate.
 Trainer hiện vẫn chọn best theo **test AUC1**, giống protocol thí nghiệm trước;
 đó không phải independent validation. Không dùng test để tune hyperparameter
-hoặc khẳng định cải thiện từ một seed. Chưa có kết quả GPU/AUC mới của GRF.
+hoặc khẳng định cải thiện từ một seed. Run `post_lgt` ở `logs/train.txt` đã
+hoàn tất nhưng bỏ LGT trên feature CLIP; chưa có kết quả GPU của lệnh `clip`
+đã sửa. Run đó không đủ để kết luận GRF làm giảm chất lượng khi giữ LGT.

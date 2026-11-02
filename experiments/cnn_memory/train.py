@@ -9,7 +9,7 @@ except ImportError:
     from config import LABEL_MAP, RESUME_KEYS, model_config, training_parser, validate_args
 
 
-def training_device(input_features="post_lgt"):
+def training_device(input_features="clip"):
     import torch
     if not torch.cuda.is_available():
         if input_features == "post_lgt":
@@ -97,6 +97,9 @@ def main():
     if args.input_features == "post_lgt":
         logger.log("cached_lgt_features=True online_lgt=False lgt_trainable=False "
                    "ca_and_cnn_share_input=True")
+    else:
+        logger.log("clip_input_features=True online_lgt=True lgt_trainable=True "
+                   "ca_and_cnn_share_post_lgt=True")
     logger.log(f"feature_fusion=gated_residual enabled={args.aux_branch == 'c'} "
                f"conv_layers=1 cnn_channels={args.cnn_channels} kernel=3 stride=1 dilation=1 padding=1 "
                f"gate_bias_init=-2.0 cnn_lr={args.lr} objective=vadclip_original "

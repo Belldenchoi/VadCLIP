@@ -200,7 +200,7 @@ class FusionEntrypointTests(unittest.TestCase):
         defaults = training_parser().parse_args(["--output-dir", "unused"])
         validate_args(defaults)
         self.assertEqual((defaults.aux_mode, defaults.aux_branch, defaults.input_features,
-                          defaults.cnn_start_epoch), ("gated_residual", "c", "post_lgt", 1))
+                          defaults.cnn_start_epoch), ("gated_residual", "c", "clip", 1))
         for flags in (["--aux-mode", "prototype"], ["--aux-mode", "future_mse"],
                       ["--aux-mode", "future_mse_joint"], ["--aux-branch", "both"],
                       ["--memory-lr", ".01"], ["--mse-loss-weight", "0"],
@@ -229,7 +229,7 @@ class FusionEntrypointTests(unittest.TestCase):
                 args = training_parser().parse_args(tokens[3:])
                 validate_args(args)
                 self.assertEqual(args.aux_mode, "gated_residual")
-                self.assertEqual(args.input_features, "post_lgt")
+                self.assertEqual(args.input_features, "clip")
                 self.assertEqual((args.cnn_channels, args.cnn_kernel), (128, 3))
                 self.assertEqual(args.cnn_start_epoch, 1)
                 self.assertEqual(args.lr, 2e-5)

@@ -5,6 +5,7 @@ Thư mục này chỉ triển khai phương pháp đã chốt trong
 Các implementation prototype, future MSE, joint MSE và bước pretrain đã được xóa.
 
 ```text
+Feature CLIP .npy tải từ repo tác giả → LGT gốc → H
 H sau LGT [B,T,512] ────────────────────────────────> nhánh A gốc
      │
      └─> Conv1D(512,128,k3) → GELU → Linear(128,512) → F_cnn
@@ -13,8 +14,10 @@ H sau LGT [B,T,512] ────────────────────
          → mlp2 + classifier C gốc → logits_C
 ```
 
-Mặc định dùng feature đã xuất sau LGT (`post_lgt`), CNN chỉ tăng cường C và
-học chung từ epoch 1. A giữ H và trọng số aggregation tính từ C gốc.
+Mặc định dùng feature CLIP tác giả phát hành (`--input-features clip`),
+chạy LGT gốc rồi CNN tăng cường C, học chung từ epoch 1. A giữ H và trọng số
+aggregation tính từ C gốc. Feature đã được trích xuất bằng CLIP vẫn chưa qua LGT.
+`post_lgt` chỉ dùng khi tự xuất đầu ra `encode_video()` của một checkpoint.
 CNN/gate dùng cùng learning rate với các đầu gốc. Loss chỉ gồm
 `CLAS2(C) + CLASM(A) + text separation` gốc.
 
@@ -33,7 +36,9 @@ Các file chính:
 
 Trainer chọn checkpoint theo **test AUC1**, không phải validation độc lập.
 `last.pt` lưu optimizer, scheduler và RNG để resume tại epoch kế tiếp. Dùng
-output trống cho run mới. Chưa có kết quả GPU/AUC mới của GRF.
+output trống cho run mới. Run `post_lgt` cũ trong `logs/train.txt` đạt best
+test AUC1 85,1513% nhưng đã bỏ LGT khi dùng feature CLIP. Chưa có kết quả GPU
+của GRF với chế độ `clip` đã sửa; cần E0/E2 cùng pipeline để kết luận.
 
 Kiểm tra CPU:
 
