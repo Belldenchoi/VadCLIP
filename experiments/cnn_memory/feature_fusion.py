@@ -5,9 +5,9 @@ from torch import nn
 from torch.nn import functional as F
 
 try:
-    from .future_features import valid_steps
+    from .feature_utils import valid_steps
 except ImportError:
-    from future_features import valid_steps
+    from feature_utils import valid_steps
 
 
 class CNNFeatureEnhancement(nn.Module):

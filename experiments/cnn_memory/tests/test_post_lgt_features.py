@@ -17,8 +17,7 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 from experiments.cnn_memory.checkpoint import checkpoint_payload, load_checkpoint
 from experiments.cnn_memory.config import model_config, training_parser, validate_args
-from experiments.cnn_memory.future_features import future_feature_mse
-from experiments.cnn_memory.tests import test_cnn_memory as fixture
+from experiments.cnn_memory.tests import fixtures as fixture
 
 
 class PostLGTFeatureTests(unittest.TestCase):
@@ -32,11 +31,11 @@ class PostLGTFeatureTests(unittest.TestCase):
     def tearDownClass(cls):
         fixture.ModelIntegrationTests.tearDownClass()
 
-    def make_model(self, kind="post_lgt", mode="future_mse_joint", branch="both"):
+    def make_model(self, kind="post_lgt", branch="c"):
         torch.manual_seed(234)
         return self.module.CNNMemoryCLIPVAD(
             3, 8, 8, 8, 1, 1, 4, 1, 1, "cpu", aux_branch=branch,
-            aux_mode=mode, input_features=kind, feature_dim=6,
+            input_features=kind, cnn_channels=4,
         ).eval()
 
     def test_cached_features_feed_original_heads_and_cnn_without_any_lgt_call(self):
@@ -45,25 +44,24 @@ class PostLGTFeatureTests(unittest.TestCase):
         # Reference: original heads, supplied the same already-encoded features.
         with patch.object(model, "encode_video", return_value=inputs[0]):
             expected = self.base_class.forward(model, *inputs)
-        model.set_memory_active(True)
+        model.set_enhancement_active(True)
         seen = []
-        hook = model.memory.encoder.register_forward_pre_hook(lambda module, args: seen.append(args[0].clone()))
+        hook = model.cnn_enhancement.register_forward_pre_hook(lambda module, args: seen.append(args[0].clone()))
         with patch.object(model, "encode_video", side_effect=AssertionError("LGT ran twice")), \
-                patch.object(model.disAdj, "forward", side_effect=AssertionError("Online graph ran")), \
-                patch.object(model.memory.predictor, "forward", side_effect=AssertionError("Predictor ran in eval")):
+                patch.object(model.disAdj, "forward", side_effect=AssertionError("Online graph ran")):
             actual = model(*inputs, return_shared_features=True)
         hook.remove()
         torch.testing.assert_close(actual[-1], inputs[0], rtol=0, atol=0)
         torch.testing.assert_close(seen[0], actual[-1], rtol=0, atol=0)
-        for a, b in zip(actual[:3], expected):
-            torch.testing.assert_close(a, b)
+        torch.testing.assert_close(actual[0], expected[0])
+        torch.testing.assert_close(actual[2], expected[2])
+        enhanced = model.cnn_enhancement(inputs[0], inputs[-1])
+        torch.testing.assert_close(actual[1], model.classifier(enhanced + model.mlp2(enhanced)))
 
-    def test_padding_nan_and_empty_chunks_are_safe_for_heads_mil_and_mse(self):
+    def test_padding_nan_and_empty_chunks_are_safe_for_heads_and_original_mil(self):
         from ucf_train import CLAS2, CLASM
         model = self.make_model().train()
-        model.set_memory_active(True)
-        with torch.no_grad():
-            model.memory.score_head.weight.normal_(0, .1)
+        model.set_enhancement_active(True)
         lengths = torch.tensor([8, 5, 0])
         clean = torch.randn(3, 8, 8)
         clean[1, 5:] = 0
@@ -82,15 +80,12 @@ class PostLGTFeatureTests(unittest.TestCase):
         labels = torch.tensor([[1., 0., 0.], [0., 1., 0.]])
         loss = CLAS2(actual[1][:2], labels, lengths[:2], "cpu")
         loss += CLASM(actual[2][:2], labels, lengths[:2], "cpu")
-        loss += .1 * CLAS2(actual[3]["memory_logits"][:2], labels, lengths[:2], "cpu")
-        mse, pairs = future_feature_mse(actual[3]["future_predictions"], dirty, lengths)
-        self.assertEqual(pairs, 11)
-        (loss + .1 * mse).backward()
+        loss.backward()
         self.assertTrue(bool(torch.isfinite(dirty.grad).all()))
         self.assertEqual(int(torch.count_nonzero(dirty.grad[1, 5:])), 0)
         self.assertEqual(int(torch.count_nonzero(dirty.grad[2])), 0)
         for parameter in (model.classifier.weight, model.mlp1.c_fc.weight,
-                          model.memory.encoder.conv1.weight, model.memory.predictor.weight):
+                          model.cnn_enhancement.conv.weight, model.cnn_enhancement.gate.weight):
             self.assertIsNotNone(parameter.grad)
             self.assertTrue(bool(torch.isfinite(parameter.grad).all()))
             self.assertGreater(float(parameter.grad.abs().sum()), 0)
@@ -104,7 +99,7 @@ class PostLGTFeatureTests(unittest.TestCase):
                 self.assertFalse(parameter.requires_grad)
                 self.assertNotIn(id(parameter), optimized)
         for module in (model.classifier, model.mlp1, model.mlp2,
-                       model.text_prompt_embeddings, model.memory):
+                       model.text_prompt_embeddings, model.cnn_enhancement):
             self.assertTrue(all(p.requires_grad for p in module.parameters()))
             self.assertTrue(all(id(p) in optimized for p in module.parameters()))
         legacy = self.make_model("clip")
@@ -115,24 +110,21 @@ class PostLGTFeatureTests(unittest.TestCase):
         visual = torch.randn(2, 8, 8)
         prompt, lengths = ["normal", "abuse", "arrest"], torch.tensor([8, 8])
         baseline = model(visual, None, prompt, lengths)
-        model.set_memory_active(True)
-        with torch.no_grad():
-            model.memory.score_head.bias.fill_(2)
+        model.set_enhancement_active(True)
         actual = model(visual, None, prompt, lengths)
-        torch.testing.assert_close(actual[1], baseline[1] + .2)
-        torch.testing.assert_close(actual[2][..., 0], baseline[2][..., 0], rtol=0, atol=0)
-        torch.testing.assert_close(actual[2][..., 1:], baseline[2][..., 1:] + .2)
+        self.assertFalse(torch.equal(actual[1], baseline[1]))
+        torch.testing.assert_close(actual[2], baseline[2], rtol=0, atol=0)
 
-    def test_checkpoint_reconstruction_saves_input_kind_and_legacy_defaults_to_clip(self):
+    def test_checkpoint_reconstruction_saves_input_kind_explicitly(self):
         args = training_parser().parse_args([
-            "--output-dir", "unused", "--aux-mode", "future_mse_joint",
-            "--input-features", "post_lgt", "--memory-start-epoch", "1",
+            "--output-dir", "unused",
+            "--input-features", "post_lgt", "--cnn-start-epoch", "1",
         ])
         validate_args(args)
         config = model_config(args)
         self.assertEqual(config["input_features"], "post_lgt")
         model = self.make_model()
-        model.set_memory_active(True)
+        model.set_enhancement_active(True)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "best.pt"
             torch.save(checkpoint_payload(model, config, args, 1, 1, {}, "best"), path)
@@ -142,16 +134,12 @@ class PostLGTFeatureTests(unittest.TestCase):
             restored = self.module.build_model(saved["model_config"], "cpu")
             self.assertIs(restored, model)
             restored.load_state_dict(saved["model_state_dict"], strict=True)
-            legacy_config = dict(config)
-            legacy_config.pop("input_features")
-            self.module.build_model(legacy_config, "cpu")
-            self.assertEqual(build.call_args.kwargs["input_features"], "clip")
 
     def test_evaluator_handles_short_exact_and_partial_cached_chunks_without_lgt(self):
         from experiments.cnn_memory.evaluation import evaluate
         from utils.tools import process_split
         model = self.make_model()
-        model.set_memory_active(True)
+        model.set_enhancement_active(True)
         loader, truth = [], []
         for index, length in enumerate((5, 8, 11)):
             array = np.random.default_rng(index).normal(size=(length, 8)).astype(np.float32)
@@ -160,7 +148,6 @@ class PostLGTFeatureTests(unittest.TestCase):
                            torch.tensor([count])))
             truth.extend([int(index != 0)] * (length * 16))
         with patch.object(model, "encode_video", side_effect=AssertionError("LGT ran in evaluator")), \
-                patch.object(model.memory.predictor, "forward", side_effect=AssertionError("MSE ran in evaluator")), \
                 patch("experiments.topk_variants.test_ucf.dmAP", return_value=([0.] * 5, [.1, .2, .3, .4, .5])):
             metrics = evaluate(model, loader, 8, ["normal", "abuse", "arrest"], np.array(truth),
                                np.zeros((3, 1, 2)), np.array(["Normal", "Abuse", "Abuse"]), "cpu", lambda s: None)
@@ -172,7 +159,7 @@ class PostLGTFeatureTests(unittest.TestCase):
         class CachedDetector(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.register_buffer("memory_active", torch.tensor(True))
+                self.register_buffer("enhancement_active", torch.tensor(True))
 
             def forward(self, visual, mask, text, lengths):
                 return torch.zeros(14, 8), visual[..., :1], visual[..., :14]
@@ -190,7 +177,7 @@ class PostLGTFeatureTests(unittest.TestCase):
             np.save(labels, np.array(["Normal", "Abuse"]))
             args = training_parser().parse_args([
                 "--output-dir", str(root), "--input-features", "post_lgt",
-                "--aux-mode", "future_mse_joint", "--visual-length", "8", "--attn-window", "4",
+                "--visual-length", "8", "--attn-window", "4",
             ])
             checkpoint = root / "best.pt"
             torch.save(checkpoint_payload(CachedDetector(), model_config(args), args, 1, 1, {}, "best"), checkpoint)
@@ -222,6 +209,21 @@ class PostLGTFeatureTests(unittest.TestCase):
         for visual in (torch.zeros(8, 8), torch.zeros(2, 8, 7)):
             with self.assertRaises(ValueError):
                 model(visual, None, ["normal", "abuse", "arrest"], torch.tensor([8, 8]))
+
+    def test_removed_method_checkpoints_are_rejected_before_building_any_model(self):
+        args = training_parser().parse_args(["--output-dir", "unused"])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "old.pt"
+            for mode in ("prototype", "future_mse", "future_mse_joint", None):
+                payload = checkpoint_payload(self.make_model(), model_config(args), args, 1, 1, {}, "best")
+                payload["format_version"] = 1
+                if mode is None:
+                    payload["model_config"].pop("aux_mode")
+                else:
+                    payload["model_config"]["aux_mode"] = mode
+                torch.save(payload, path)
+                with self.assertRaisesRegex(ValueError, "gated_residual checkpoints"):
+                    load_checkpoint(path)
 
 
 if __name__ == "__main__":

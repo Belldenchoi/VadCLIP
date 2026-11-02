@@ -1,1 +1,1 @@
-"""Isolated UCF-Crime CNN visual-memory experiment."""
+"""Isolated UCF-Crime CNN gated residual feature fusion experiment."""

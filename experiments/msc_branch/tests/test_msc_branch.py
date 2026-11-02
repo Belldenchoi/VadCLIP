@@ -169,15 +169,13 @@ class CalibrationAndDataTests(unittest.TestCase):
 class ModelAndTrainingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from experiments.cnn_memory.tests.test_cnn_memory import FakeCLIP, tokenize
-        fake = types.ModuleType('clip')
-        fake.clip = types.SimpleNamespace(load=lambda *args: (FakeCLIP(), None), tokenize=tokenize)
-        cls.clip_patch = patch.dict(sys.modules, {'clip': fake})
-        cls.clip_patch.start()
+        from experiments.cnn_memory.tests.fixtures import mocked_clip
+        cls.clip_patch = mocked_clip()
+        cls.clip_patch.__enter__()
         cls.module = importlib.import_module('experiments.msc_branch.msc_model')
 
     @classmethod
-    def tearDownClass(cls): cls.clip_patch.stop()
+    def tearDownClass(cls): cls.clip_patch.__exit__(None, None, None)
 
     def make_model(self):
         torch.manual_seed(234)
@@ -217,7 +215,7 @@ class ModelAndTrainingTests(unittest.TestCase):
 
     def test_training_modes_resume_and_warmup(self):
         from experiments.msc_branch import train as entrypoint
-        from experiments.cnn_memory.cnn_memory import CNNVisualMemory
+        from experiments.msc_branch.prototype_memory import CNNVisualMemory
         class TinyDetector(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -268,25 +266,8 @@ class ModelAndTrainingTests(unittest.TestCase):
                     entrypoint.main()
                 return load_checkpoint(output/'last.pt')
             arms = {mode: run(mode, mode) for mode in ('none', 'standard', 'mean_shifted')}
-            # Verify the new trainer with loss disabled reproduces the existing
-            # CNN trainer's entire trajectory on the same CPU fixture.
-            from experiments.cnn_memory import train as old_entrypoint
-            from experiments.cnn_memory import cnn_memory_model
-            old_common = []
-            for index in range(0, len(common), 2):
-                if common[index] not in ('--contrastive-start-epoch', '--representation-hidden', '--representation-dim'):
-                    old_common += common[index:index+2]
-            legacy_output = root/'legacy_cnn'
-            with patch.object(sys, 'argv', ['train.py', *old_common, '--output-dir', str(legacy_output), '--max-epoch', '3']), \
-                 patch.object(old_entrypoint, 'training_device', return_value='cpu'), \
-                 patch.object(cnn_memory_model, 'build_model', side_effect=lambda *args: TinyDetector()), \
-                 patch('experiments.topk_variants.test_ucf.dmAP', return_value=([0.]*5, [.1,.2,.3,.4,.5])), \
-                 contextlib.redirect_stdout(io.StringIO()):
-                old_entrypoint.main()
-            legacy = torch.load(legacy_output/'last.pt', weights_only=True)
-            for key, value in arms['none']['model_state_dict'].items():
-                torch.testing.assert_close(value, legacy['model_state_dict'][key], rtol=0, atol=0)
-            self.assertEqual((legacy_output/'metrics.jsonl').read_text(), (root/'none/metrics.jsonl').read_text())
+            # All three MSC arms keep the same warm-up trajectory; exact
+            # resume and the disabled-loss control are checked below.
             run('resumed', 'mean_shifted', 2)
             resumed = run('resumed', 'mean_shifted', 3, True)
             self.assertEqual(resumed['best_metrics'], arms['mean_shifted']['best_metrics'])

@@ -1,7 +1,7 @@
 """CNN-memory controls plus a training-only contrastive representation branch."""
 import math
 
-from experiments.cnn_memory.config import (
+from experiments.msc_branch.prototype_config import (
     LABEL_MAP, MODEL_KEYS as CNN_MODEL_KEYS, RESUME_KEYS as CNN_RESUME_KEYS,
     training_parser as cnn_parser, validate_args as validate_cnn_args,
 )

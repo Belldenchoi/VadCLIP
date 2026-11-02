@@ -17,6 +17,10 @@ của A, repeat 16, detection mAP tại IoU 0.1–0.5 và format log Top-K.
 MLP contrastive không chạy lúc test. Cần cập nhật đồng bộ `msc_branch`,
 `cnn_memory` và evaluator Top-K trong cùng checkout.
 
+Control prototype của MSC hiện nằm trong `prototype_control.py`,
+`prototype_memory.py` và `prototype_config.py` tại thư mục MSC. Việc dọn
+`cnn_memory` chỉ còn GRF không thay kiến trúc, loss hoặc checkpoint của MSC.
+
 ```bash
 python experiments/msc_branch/train.py --help
 python -B -m unittest discover -s experiments/msc_branch/tests -v

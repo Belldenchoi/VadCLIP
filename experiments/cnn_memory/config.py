@@ -1,4 +1,4 @@
-"""Explicit options for this experiment, without unrelated ablation flags."""
+"""Options for the single agreed CNN + gated residual fusion experiment."""
 
 import argparse
 import math
@@ -13,12 +13,12 @@ LABEL_MAP = dict(zip(
 ))
 MODEL_KEYS = (
     "visual_length", "visual_layers", "attn_window", "prompt_prefix",
-    "prompt_postfix", "aux_branch", "cnn_kernel", "feature_dim",
-    "memory_slots", "memory_temperature", "residual_scale", "aux_mode",
+    "prompt_postfix", "aux_branch", "cnn_kernel", "cnn_channels",
+    "aux_mode", "input_features",
 )
 RESUME_KEYS = MODEL_KEYS + (
-    "seed", "batch_size", "lr", "memory_lr", "scheduler_milestones",
-    "scheduler_rate", "memory_loss_weight", "memory_start_epoch",
+    "seed", "batch_size", "lr", "scheduler_milestones",
+    "scheduler_rate", "cnn_start_epoch",
     "eval_steps", "train_list", "test_list", "gt_path",
     "gt_segment_path", "gt_label_path",
 )
@@ -34,7 +34,7 @@ def add_data_options(parser, training=False):
 
 
 def training_parser():
-    parser = argparse.ArgumentParser(description="VadCLIP + CNN feature fusion / legacy memory modes (UCF-Crime)")
+    parser = argparse.ArgumentParser(description="VadCLIP + CNN gated residual fusion, C-only (UCF-Crime)")
     add_data_options(parser, training=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--seed", type=int, default=234)
@@ -42,7 +42,6 @@ def training_parser():
                         help="Clips per normal/anomaly loader; combined batch is twice this")
     parser.add_argument("--max-epoch", type=int, default=10)
     parser.add_argument("--lr", type=float, default=2e-5)
-    parser.add_argument("--memory-lr", type=float, default=2e-4)
     parser.add_argument("--scheduler-milestones", nargs="+", type=int, default=[4, 8])
     parser.add_argument("--scheduler-rate", type=float, default=0.1)
     parser.add_argument("--eval-steps", type=int, default=10,
@@ -52,26 +51,17 @@ def training_parser():
     parser.add_argument("--attn-window", type=int, default=8)
     parser.add_argument("--prompt-prefix", type=int, default=10)
     parser.add_argument("--prompt-postfix", type=int, default=10)
-    parser.add_argument("--aux-branch", choices=("none", "c", "a", "both"), default="both")
-    parser.add_argument("--aux-mode", choices=("prototype", "future_mse", "future_mse_joint", "gated_residual"), default="prototype",
-                        help="Legacy memory/MSE modes, or one-Conv gated feature enhancement for C only")
-    parser.add_argument("--input-features", choices=("clip", "post_lgt"), default="clip",
+    parser.add_argument("--aux-branch", choices=("none", "c"), default="c",
+                        help="c enables GRF; none runs the matched E0 control")
+    parser.add_argument("--aux-mode", choices=("gated_residual",), default="gated_residual")
+    parser.add_argument("--input-features", choices=("clip", "post_lgt"), default="post_lgt",
                         help="clip runs the original LGT; post_lgt uses cached LGT outputs directly for C/A and CNN")
-    parser.add_argument("--pretrained-cnn", help="Stage-1 encoder.pt; required for a fresh future_mse run")
-    parser.add_argument("--future-horizon", type=int, default=1,
-                        help="Future target offset on the feature grid in future_mse_joint mode")
-    parser.add_argument("--mse-loss-weight", type=float, default=0.1,
-                        help="Joint MSE coefficient; 0 disables only MSE for a matched ablation")
-    parser.add_argument("--cnn-kernel", type=int, choices=(1, 3), default=3)
+    parser.add_argument("--cnn-kernel", type=int, default=3,
+                        help="Fixed at 3 in the agreed baseline v1")
     parser.add_argument("--cnn-channels", type=int, default=128,
                         help="Output channels of the single Conv1D in gated_residual mode")
-    parser.add_argument("--feature-dim", type=int, default=256)
-    parser.add_argument("--memory-slots", type=int, default=8, help="Slots in each of two banks")
-    parser.add_argument("--memory-temperature", type=float, default=0.1)
-    parser.add_argument("--residual-scale", type=float, default=0.1)
-    parser.add_argument("--memory-loss-weight", type=float, default=0.1)
-    parser.add_argument("--memory-start-epoch", type=int, default=3,
-                        help="1-based epoch enabling C feature fusion or the legacy auxiliary branch")
+    parser.add_argument("--cnn-start-epoch", type=int, default=1,
+                        help="1-based epoch enabling GRF; defaults to the first epoch")
     parser.add_argument("--resume", help="Resume the last.pt checkpoint at the next epoch")
     parser.add_argument("--preflight", action="store_true",
                         help="Validate input files/GT without loading CLIP or training")
@@ -79,46 +69,27 @@ def training_parser():
 
 
 def validate_args(args):
-    if args.aux_mode == "gated_residual":
-        if args.aux_branch not in ("c", "none"):
-            raise ValueError("gated_residual requires --aux-branch c (or none for the baseline control)")
-        if args.cnn_kernel != 3:
-            raise ValueError("gated_residual baseline v1 uses exactly one Conv1D with --cnn-kernel 3")
-    if args.aux_mode == "future_mse" and args.aux_branch != "none" and not (args.pretrained_cnn or args.resume):
-        raise ValueError("future_mse requires --pretrained-cnn from pretrain.py (or --resume)")
-    if args.aux_mode != "future_mse" and args.pretrained_cnn:
-        raise ValueError("--pretrained-cnn only applies to --aux-mode future_mse")
-    if args.aux_mode == "future_mse_joint" and not 1 <= args.future_horizon < args.visual_length:
-        raise ValueError("Joint training requires 1 <= --future-horizon < --visual-length")
-    if not math.isfinite(args.mse_loss_weight) or args.mse_loss_weight < 0:
-        raise ValueError("--mse-loss-weight must be finite and non-negative")
+    if args.aux_mode != "gated_residual" or args.aux_branch not in ("c", "none"):
+        raise ValueError("Only gated_residual C fusion or the E0 control is supported")
+    if args.cnn_kernel != 3:
+        raise ValueError("gated_residual baseline v1 uses exactly one Conv1D with --cnn-kernel 3")
     for key in ("batch_size", "max_epoch", "eval_steps", "visual_length",
-                "visual_layers", "attn_window", "feature_dim", "memory_slots",
-                "memory_start_epoch", "cnn_channels"):
+                "visual_layers", "attn_window", "cnn_start_epoch", "cnn_channels"):
         if getattr(args, key) < 1:
             raise ValueError(f"--{key.replace('_', '-')} must be positive")
-    for key in ("lr", "memory_lr", "scheduler_rate", "memory_temperature", "residual_scale"):
+    for key in ("lr", "scheduler_rate"):
         value = getattr(args, key)
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"--{key.replace('_', '-')} must be finite and positive")
-    if not math.isfinite(args.memory_loss_weight) or args.memory_loss_weight < 0:
-        raise ValueError("--memory-loss-weight must be finite and non-negative")
     if args.visual_length % args.attn_window:
         raise ValueError("--visual-length must be divisible by --attn-window")
     if min(args.prompt_prefix, args.prompt_postfix) < 0 or args.prompt_prefix + args.prompt_postfix > 60:
         raise ValueError("Prompt lengths must be non-negative with total <= 60")
     if any(epoch < 1 for epoch in args.scheduler_milestones):
         raise ValueError("Scheduler milestones must be positive")
-    if args.memory_start_epoch > args.max_epoch:
-        raise ValueError("--memory-start-epoch must not exceed --max-epoch")
+    if args.cnn_start_epoch > args.max_epoch:
+        raise ValueError("--cnn-start-epoch must not exceed --max-epoch")
 
 
 def model_config(args):
-    config = {key: getattr(args, key) for key in MODEL_KEYS}
-    # Keep the keys shared with older experiments unchanged.
-    config["input_features"] = args.input_features
-    if args.aux_mode == "future_mse_joint":
-        config["future_horizon"] = args.future_horizon
-    if args.aux_mode == "gated_residual":
-        config["cnn_channels"] = args.cnn_channels
-    return config
+    return {key: getattr(args, key) for key in MODEL_KEYS}

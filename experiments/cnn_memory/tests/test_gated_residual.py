@@ -21,7 +21,7 @@ sys.path.insert(0, str(REPO))
 from experiments.cnn_memory.checkpoint import checkpoint_payload, load_checkpoint
 from experiments.cnn_memory.config import model_config, training_parser, validate_args
 from experiments.cnn_memory.feature_fusion import CNNFeatureEnhancement
-from experiments.cnn_memory.tests import test_cnn_memory as fixture
+from experiments.cnn_memory.tests import fixtures as fixture
 
 
 class FusionModuleTests(unittest.TestCase):
@@ -94,7 +94,7 @@ class FusionModelTests(unittest.TestCase):
                 visual, lengths = torch.randn(2, 8, 8), torch.tensor([8, 5])
                 prompt = ["normal", "abuse", "arrest"]
                 baseline = model(visual, None, prompt, lengths, return_shared_features=True)
-                model.set_memory_active(True)
+                model.set_enhancement_active(True)
                 seen = []
                 hook = model.classifier.register_forward_pre_hook(lambda layer, args: seen.append(args[0].clone()))
                 with patch.object(model, "encode_video", wraps=model.encode_video) as encode:
@@ -106,7 +106,7 @@ class FusionModelTests(unittest.TestCase):
                 torch.testing.assert_close(actual[-1], baseline[-1], rtol=0, atol=0)
                 self.assertGreater(float((actual[1] - baseline[1]).detach().abs().max()), 1e-8)
                 self.assertIsNone(actual[3])
-                self.assertIsNone(model.memory)
+                self.assertFalse(hasattr(model, "memory"))
                 self.assertFalse(hasattr(model.cnn_enhancement, "score_head"))
                 self.assertFalse(hasattr(model.cnn_enhancement, "predictor"))
                 self.assertEqual([name for name, _ in model.named_modules() if name == "classifier"], ["classifier"])
@@ -116,7 +116,7 @@ class FusionModelTests(unittest.TestCase):
         for kind in ("post_lgt", "clip"):
             with self.subTest(kind=kind):
                 model = self.make_model(kind=kind).train()
-                model.set_memory_active(True)
+                model.set_enhancement_active(True)
                 visual, lengths = torch.randn(2, 8, 8), torch.tensor([8, 5])
                 _, c, _ = model(visual, None, ["normal", "abuse", "arrest"], lengths)
                 labels = torch.tensor([[1., 0., 0.], [0., 1., 0.]])
@@ -135,7 +135,7 @@ class FusionModelTests(unittest.TestCase):
     def test_a_loss_has_no_direct_path_to_cnn_fusion(self):
         from ucf_train import CLASM
         model = self.make_model().train()
-        model.set_memory_active(True)
+        model.set_enhancement_active(True)
         visual, lengths = torch.randn(2, 8, 8), torch.tensor([8, 5])
         _, _, a = model(visual, None, ["normal", "abuse", "arrest"], lengths)
         CLASM(a, torch.tensor([[1., 0., 0.], [0., 1., 0.]]), lengths, "cpu").backward()
@@ -150,12 +150,12 @@ class FusionModelTests(unittest.TestCase):
         torch.testing.assert_close(torch.get_rng_state(), rng, rtol=0, atol=0)
         for key, value in control.state_dict().items():
             torch.testing.assert_close(model.state_dict()[key], value, rtol=0, atol=0)
-        model.set_memory_active(True)
+        model.set_enhancement_active(True)
         inputs = torch.randn(2, 8, 8), None, ["normal", "abuse", "arrest"], torch.tensor([8, 8])
         expected = model(*inputs)
         restored = self.make_model()
         restored.load_state_dict(copy.deepcopy(model.state_dict()), strict=True)
-        self.assertTrue(bool(restored.memory_active))
+        self.assertTrue(bool(restored.enhancement_active))
         for a, b in zip(restored(*inputs), expected):
             torch.testing.assert_close(a, b, rtol=0, atol=0)
 
@@ -173,7 +173,7 @@ class FusionModelTests(unittest.TestCase):
         with patch.object(model, "encode_video", side_effect=AssertionError("LGT ran on cached features")), \
                 patch("experiments.topk_variants.test_ucf.dmAP", return_value=([0.] * 5, [.1, .2, .3, .4, .5])):
             baseline = evaluate(model, *values, log=lambda s: None)
-            model.set_memory_active(True)
+            model.set_enhancement_active(True)
             actual = evaluate(model, *values, log=lambda s: None)
         self.assertTrue(all(np.isfinite(v) for v in actual.values()))
         self.assertEqual((actual["AUC2"], actual["AP2"]), (baseline["AUC2"], baseline["AP2"]))
@@ -193,11 +193,20 @@ class FusionEntrypointTests(unittest.TestCase):
         args = training_parser().parse_args(base)
         validate_args(args)
         self.assertEqual(model_config(args)["cnn_channels"], 128)
-        for flags in (["--aux-branch", "a"], ["--aux-branch", "both"], ["--cnn-kernel", "1"], ["--cnn-channels", "0"]):
+        for flags in (["--cnn-kernel", "1"], ["--cnn-channels", "0"]):
             with self.assertRaises(ValueError):
                 validate_args(training_parser().parse_args(base + flags))
         validate_args(training_parser().parse_args(base + ["--aux-branch", "none"]))
-        self.assertNotIn("cnn_channels", model_config(training_parser().parse_args(["--output-dir", "unused"])))
+        defaults = training_parser().parse_args(["--output-dir", "unused"])
+        validate_args(defaults)
+        self.assertEqual((defaults.aux_mode, defaults.aux_branch, defaults.input_features,
+                          defaults.cnn_start_epoch), ("gated_residual", "c", "post_lgt", 1))
+        for flags in (["--aux-mode", "prototype"], ["--aux-mode", "future_mse"],
+                      ["--aux-mode", "future_mse_joint"], ["--aux-branch", "both"],
+                      ["--memory-lr", ".01"], ["--mse-loss-weight", "0"],
+                      ["--pretrained-cnn", "old.pt"], ["--memory-start-epoch", "1"]):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                training_parser().parse_args(["--output-dir", "unused", *flags])
         module = fixture.ModelIntegrationTests.module
         with patch.object(module, "CNNMemoryCLIPVAD") as constructor:
             module.build_model(model_config(args), "cpu")
@@ -222,8 +231,7 @@ class FusionEntrypointTests(unittest.TestCase):
                 self.assertEqual(args.aux_mode, "gated_residual")
                 self.assertEqual(args.input_features, "post_lgt")
                 self.assertEqual((args.cnn_channels, args.cnn_kernel), (128, 3))
-                self.assertEqual((args.memory_loss_weight, args.mse_loss_weight), (0, 0))
-                self.assertEqual(args.memory_start_epoch, 1)
+                self.assertEqual(args.cnn_start_epoch, 1)
                 self.assertEqual(args.lr, 2e-5)
                 runs.append(args)
             else:
@@ -231,7 +239,7 @@ class FusionEntrypointTests(unittest.TestCase):
                 evaluation = dict(zip(tokens[3::2], tokens[4::2]))
         self.assertEqual([args.aux_branch for args in runs], ["c", "none"])
         self.assertEqual(evaluation["--checkpoint"], runs[0].output_dir + "/best.pt")
-        for key in ("train_list", "test_list", "seed", "lr", "batch_size", "max_epoch", "input_features", "memory_start_epoch"):
+        for key in ("train_list", "test_list", "seed", "lr", "batch_size", "max_epoch", "input_features", "cnn_start_epoch"):
             self.assertEqual(getattr(runs[0], key), getattr(runs[1], key))
 
     def test_training_uses_only_original_losses_updates_fusion_and_resumes_exactly(self):
@@ -245,16 +253,15 @@ class FusionEntrypointTests(unittest.TestCase):
                 self.projection = nn.Linear(512, 8)
                 self.classifier = nn.Linear(8, 1)
                 self.text = nn.Parameter(torch.randn(14, 8))
-                self.memory = None
                 self.cnn_enhancement = CNNFeatureEnhancement(8, config["cnn_channels"])
-                self.register_buffer("memory_active", torch.tensor(False))
+                self.register_buffer("enhancement_active", torch.tensor(False))
 
-            def set_memory_active(self, active):
-                self.memory_active.fill_(active)
+            def set_enhancement_active(self, active):
+                self.enhancement_active.fill_(active)
 
             def forward(self, visual, mask, text, lengths, return_aux=False):
                 h = self.projection(visual.float())
-                enhanced = self.cnn_enhancement(h, lengths) if bool(self.memory_active) else h
+                enhanced = self.cnn_enhancement(h, lengths) if bool(self.enhancement_active) else h
                 outputs = self.text, self.classifier(enhanced), h @ self.text.T
                 return (*outputs, None) if return_aux else outputs
 
@@ -274,7 +281,7 @@ class FusionEntrypointTests(unittest.TestCase):
                       "--gt-segment-path", str(segments), "--gt-label-path", str(labels),
                       "--aux-mode", "gated_residual", "--aux-branch", "c", "--input-features", "post_lgt",
                       "--cnn-channels", "4", "--batch-size", "1", "--visual-length", "8", "--attn-window", "4",
-                      "--eval-steps", "1", "--memory-start-epoch", "1"]
+                      "--eval-steps", "1", "--cnn-start-epoch", "1"]
             initial = {}
 
             def build(config, device):
@@ -288,7 +295,6 @@ class FusionEntrypointTests(unittest.TestCase):
                     args += ["--resume", str(output / "last.pt")]
                 with patch.object(sys, "argv", args), patch.object(entrypoint, "training_device", return_value="cpu"), \
                         patch.object(cnn_memory_model, "build_model", side_effect=build), \
-                        patch("experiments.cnn_memory.future_features.future_feature_mse", side_effect=AssertionError("MSE used in GRF")), \
                         patch("ucf_train.CLAS2", wraps=CLAS2) as binary_loss, \
                         patch("experiments.topk_variants.test_ucf.dmAP", return_value=([0.] * 5, [.1, .2, .3, .4, .5])), \
                         contextlib.redirect_stdout(io.StringIO()):
@@ -298,7 +304,28 @@ class FusionEntrypointTests(unittest.TestCase):
             run(root / "continuous", 2)
             run(root / "resumed", 1)
             run(root / "resumed", 2, resume=True)
+            # A published GRF v1 checkpoint must resume the same trajectory too.
+            run(root / "v1", 1)
+            legacy = load_checkpoint(root / "v1/last.pt")
+            legacy["format_version"] = 1
+            legacy["model_state_dict"]["memory_active"] = legacy["model_state_dict"].pop("enhancement_active")
+            legacy["train_args"]["memory_start_epoch"] = legacy["train_args"].pop("cnn_start_epoch")
+            for key, value in dict(feature_dim=256, memory_slots=8, memory_temperature=.1,
+                                   residual_scale=.1).items():
+                legacy["model_config"][key] = legacy["train_args"][key] = value
+            legacy["train_args"].update(memory_lr=2e-4, memory_loss_weight=0., mse_loss_weight=0.,
+                                        future_horizon=1, pretrained_cnn=None)
+            legacy["pretraining_info"] = None
+            torch.save(legacy, root / "v1/last.pt")
+            run(root / "v1", 2, resume=True)
             expected, actual = [load_checkpoint(root / name / "last.pt") for name in ("continuous", "resumed")]
+            migrated = load_checkpoint(root / "v1/last.pt")
+            self.assertEqual(migrated["format_version"], 2)
+            self.assertEqual(migrated["best_metrics"], expected["best_metrics"])
+            self.assertNotIn("memory_lr", migrated["train_args"])
+            self.assertNotIn("pretraining_info", migrated)
+            for key, tensor in migrated["model_state_dict"].items():
+                torch.testing.assert_close(tensor, expected["model_state_dict"][key], rtol=0, atol=0)
             self.assertEqual(actual["model_config"]["cnn_channels"], 4)
             self.assertEqual(actual["model_config"]["aux_mode"], "gated_residual")
             self.assertEqual(len(actual["optimizer_state_dict"]["param_groups"]), 1)
@@ -312,9 +339,9 @@ class FusionEntrypointTests(unittest.TestCase):
             self.assertIn("auxiliary_classifier=False mse=False", logs)
             for line in logs.splitlines():
                 if re.search(r"epoch=\d+/\d+ batch=", line):
-                    values = dict((k, float(v)) for k, v in re.findall(r"\b(loss|loss1|loss2|loss3|weighted_memory|weighted_mse)=([\d.]+)", line))
-                    self.assertEqual(values["weighted_memory"], 0)
-                    self.assertEqual(values["weighted_mse"], 0)
+                    values = dict((k, float(v)) for k, v in re.findall(r"\b(loss|loss1|loss2|loss3)=([\d.]+)", line))
+                    self.assertNotIn("memory", line)
+                    self.assertNotIn("mse", line)
                     self.assertAlmostEqual(values["loss"], sum(values[k] for k in ("loss1", "loss2", "loss3")), delta=.0003)
             with self.assertRaisesRegex(ValueError, "cnn_channels"):
                 run(root / "resumed", 3, resume=True, extra=("--cnn-channels", "8"))

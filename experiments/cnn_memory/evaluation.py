@@ -11,7 +11,8 @@ from experiments.topk_variants.test_ucf import test as test_ucf
 
 
 def evaluate(model, loader, maxlen, prompt_text, gt, gtsegments, gtlabels, device, log=print):
-    log(f"cnn_memory_eval_active={bool(getattr(model, 'memory_active', False))} "
+    phase = "enhancement_active" if hasattr(model, "enhancement_active") else "memory_active"
+    log(f"{phase}={bool(getattr(model, phase, False))} "
         "evaluation=raw_scores repeat=16 evaluation_backend=topk_variants.test_ucf")
     return test_ucf(
         model, loader, maxlen, prompt_text, gt, gtsegments, gtlabels, device,

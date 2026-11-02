@@ -1,5 +1,5 @@
 """Keep all C/A outputs while training a separate post-LGT MLP."""
-from experiments.cnn_memory.cnn_memory_model import CNNMemoryCLIPVAD
+from experiments.msc_branch.prototype_control import CNNMemoryCLIPVAD
 from experiments.msc_branch.representation import RepresentationBranch
 
 

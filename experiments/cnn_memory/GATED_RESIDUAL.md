@@ -2,7 +2,7 @@
 
 Triển khai thiết kế người dùng chốt ngày 02/11/2026 trong
 `reports/cnn_memory/VadCLIP_CNN_Gated_Residual_Fusion_Method.md`.
-Mode mới: `--aux-mode gated_residual --aux-branch c`.
+Đây là phương pháp duy nhất trong `cnn_memory`, mặc định bật cho nhánh C.
 Code nằm trong thí nghiệm `cnn_memory`; không sửa `src/` hoặc notebook.
 
 ## Cách làm
@@ -51,7 +51,7 @@ thay đổi gián tiếp, dù A không nhận H_enhanced hoặc gradient trực 
 
 ## Đầu vào và loss
 
-Người dùng xác nhận `.npy` đã xuất sau LGT: chọn `--input-features post_lgt`.
+Người dùng xác nhận `.npy` đã xuất sau LGT: mặc định `--input-features post_lgt`.
 H được cấp trực tiếp cho C/A và CNN; không chạy LGT lần nữa. LGT offline không
 được cập nhật. Nếu dùng feature CLIP chưa qua LGT, chọn `--input-features clip`;
 CNN vẫn được gắn sau LGT online, gradient C có thể đi qua shared LGT.
@@ -62,11 +62,11 @@ loss = CLAS2(logits_C, video_labels)
      + loss_text_original
 ```
 
-Không tính loss memory, MSE hoặc loss phụ mới trong mode này. Các trường
-`loss_memory`, `weighted_memory`, `loss_mse`, `weighted_mse`, `mse_pairs` được
-giữ trong formatter cũ với giá trị 0 để đọc log tương thích.
+Chỉ tính ba loss gốc. Log giữ cấu trúc `epoch`, `batch`, `loss`, `loss1`,
+`loss2`, `loss3`, `lr`, `peak_vram` như các thí nghiệm trước. Các trường loss
+memory/MSE đã được bỏ khỏi log.
 CNN/projection/gate nằm cùng nhóm optimizer và cùng LR với các đầu gốc:
-2e-5 trong lệnh dưới. `memory_lr` của các mode cũ không được dùng cho GRF.
+2e-5 trong lệnh dưới.
 
 ## Cell train Kaggle — E2
 
@@ -84,16 +84,14 @@ python -u experiments/cnn_memory/train.py \
   --gt-segment-path list/gt_segment_ucf.npy \
   --gt-label-path list/gt_label_ucf.npy \
   --input-features post_lgt \
-  --aux-mode gated_residual --aux-branch c \
+  --aux-branch c \
   --cnn-kernel 3 --cnn-channels 128 \
-  --memory-start-epoch 1 \
-  --memory-loss-weight 0 --mse-loss-weight 0 \
+  --cnn-start-epoch 1 \
   --lr 2e-5 --seed 234 --batch-size 64 --max-epoch 10 \
-  --output-dir outputs/cnn_grf_c_k3_ch128_s234_20261102_r1
+  --output-dir outputs/cnn_grf_c_k3_ch128_s234_20261102_r2
 ```
 
-`memory-start-epoch` là tên cờ phase cũ, trong mode này điều khiển bật feature
-enhancement. Đặt 1 để học ngay từ epoch đầu, không có pretrain hoặc warm-up.
+`--cnn-start-epoch` mặc định 1: CNN/gate học ngay từ epoch đầu cùng C/A.
 Trainer tự evaluate mỗi 10 update và cuối epoch bằng evaluator chung với Top-K/gốc.
 Log mới có `feature_fusion=gated_residual`, `conv_layers=1`, `cnn_channels=128`,
 `objective=vadclip_original`, `auxiliary_classifier=False mse=False`,
@@ -114,12 +112,11 @@ python -u experiments/cnn_memory/train.py \
   --gt-segment-path list/gt_segment_ucf.npy \
   --gt-label-path list/gt_label_ucf.npy \
   --input-features post_lgt \
-  --aux-mode gated_residual --aux-branch none \
+  --aux-branch none \
   --cnn-kernel 3 --cnn-channels 128 \
-  --memory-start-epoch 1 \
-  --memory-loss-weight 0 --mse-loss-weight 0 \
+  --cnn-start-epoch 1 \
   --lr 2e-5 --seed 234 --batch-size 64 --max-epoch 10 \
-  --output-dir outputs/cnn_grf_e0_s234_20261102_r1
+  --output-dir outputs/cnn_grf_e0_s234_20261102_r2
 ```
 
 E1 bỏ gate, các kernel 5/7 và các hướng mở rộng khác trong bản thiết kế chưa
@@ -134,18 +131,27 @@ python -u experiments/cnn_memory/evaluate.py \
   --gt-path list/gt_ucf.npy \
   --gt-segment-path list/gt_segment_ucf.npy \
   --gt-label-path list/gt_label_ucf.npy \
-  --checkpoint outputs/cnn_grf_c_k3_ch128_s234_20261102_r1/best.pt \
-  --log-path outputs/cnn_grf_c_k3_ch128_s234_20261102_r1/evaluate.log
+  --checkpoint outputs/cnn_grf_c_k3_ch128_s234_20261102_r2/best.pt \
+  --log-path outputs/cnn_grf_c_k3_ch128_s234_20261102_r2/evaluate.log
 ```
 
 Evaluate/predict đọc mode, input type, cnn_channels và phase từ checkpoint;
 CNN/gate tiếp tục chạy tại inference. Không có đầu tương lai cần bỏ đi.
 `last.pt` chứa optimizer, scheduler và RNG để resume đúng run.
 Không resume checkpoint memory/MSE bằng GRF hoặc đổi cnn_channels/input type.
-Run mới cần output trống; đổi r1 thành r2 nếu đã có kết quả.
+Run mới cần output trống; tăng hậu tố `r2` nếu đã có kết quả.
 
-Các mode `prototype`, `future_mse`, `future_mse_joint` được giữ để tái hiện run
-cũ; mặc định CLI chưa đổi. Cần chọn rõ `gated_residual` để chạy phương pháp mới.
+Đã xóa implementation, pretrain, loss, cờ CLI và hướng dẫn chạy của các mode
+`prototype`, `future_mse`, `future_mse_joint` khỏi `cnn_memory`. Lệnh cũ có các
+cờ memory/MSE sẽ báo lỗi; dùng các cell trên. Checkpoint các phương pháp cũ
+được từ chối rõ ràng. Checkpoint GRF format v1 được chuyển tên trạng thái sang
+`enhancement_active` khi nạp; checkpoint mới dùng format v2. Khi resume GRF v1,
+thay cờ `--memory-start-epoch` bằng `--cnn-start-epoch` và bỏ các cờ memory/MSE.
+
+MSC là thí nghiệm độc lập: phần prototype mà nó cần đã được chuyển về
+`experiments/msc_branch/prototype_*.py`, giữ nguyên phép tính/checkpoint của MSC.
+Notebook và log cũ được giữ làm tư liệu; chỉ dùng các cell setup của notebook
+cũ rồi thay cell train bằng lệnh trong tài liệu này. Code cũ có trong Git history.
 Evaluator vẫn dùng raw score, repeat 16, AUC1/AP1, AUC2/AP2 và mAP; không video gate.
 Trainer hiện vẫn chọn best theo **test AUC1**, giống protocol thí nghiệm trước;
 đó không phải independent validation. Không dùng test để tune hyperparameter
