@@ -1,4 +1,4 @@
-"""Add logit residuals; optionally consume cached LGT outputs directly."""
+"""C-head feature fusion or legacy logit residuals, with optional cached LGT inputs."""
 
 import torch
 import torch.nn.functional as F
@@ -6,10 +6,12 @@ import torch.nn.functional as F
 try:
     from . import bootstrap
     from .cnn_memory import CNNVisualMemory
+    from .feature_fusion import CNNFeatureEnhancement
     from .future_features import FutureFeatureAuxiliary, JointFutureFeatureAuxiliary, valid_steps
 except ImportError:
     import bootstrap
     from cnn_memory import CNNVisualMemory
+    from feature_fusion import CNNFeatureEnhancement
     from future_features import FutureFeatureAuxiliary, JointFutureFeatureAuxiliary, valid_steps
 
 from model import CLIPVAD
@@ -21,7 +23,7 @@ class CNNMemoryCLIPVAD(CLIPVAD):
 
     def __init__(self, *args, aux_branch="both", cnn_kernel=3, feature_dim=256,
                  memory_slots=8, memory_temperature=0.1, residual_scale=0.1,
-                 aux_mode="prototype", input_features="clip", **kwargs):
+                 aux_mode="prototype", input_features="clip", cnn_channels=128, **kwargs):
         super().__init__(*args, **kwargs)
         if input_features not in ("clip", "post_lgt"):
             raise ValueError("Unknown input feature kind")
@@ -33,17 +35,22 @@ class CNNMemoryCLIPVAD(CLIPVAD):
         if aux_branch not in ("none", "c", "a", "both"):
             raise ValueError("Unknown auxiliary branch")
         self.aux_branch = aux_branch
-        if aux_mode not in ("prototype", "future_mse", "future_mse_joint"):
+        if aux_mode not in ("prototype", "future_mse", "future_mse_joint", "gated_residual"):
             raise ValueError("Unknown auxiliary mode")
+        if aux_mode == "gated_residual" and (aux_branch not in ("c", "none") or cnn_kernel != 3):
+            raise ValueError("gated_residual baseline v1 supports C-only fusion with kernel 3")
         self.aux_mode = aux_mode
         self.pretraining_info = None
         self.residual_scale = residual_scale
         self.register_buffer("memory_active", torch.tensor(False))
         self.memory = None
+        self.cnn_enhancement = None
         if aux_branch != "none":
             # Do not change the subsequent loader RNG relative to --aux-branch none.
             with torch.random.fork_rng(devices=[]):
-                if aux_mode == "future_mse_joint":
+                if aux_mode == "gated_residual":
+                    self.cnn_enhancement = CNNFeatureEnhancement(self.visual_width, cnn_channels)
+                elif aux_mode == "future_mse_joint":
                     self.memory = JointFutureFeatureAuxiliary(
                         self.visual_width, feature_dim, self.num_class, cnn_kernel,
                     )
@@ -58,7 +65,7 @@ class CNNMemoryCLIPVAD(CLIPVAD):
                     )
 
     def set_memory_active(self, active):
-        self.memory_active.fill_(bool(active) and self.memory is not None)
+        self.memory_active.fill_(bool(active) and (self.memory is not None or self.cnn_enhancement is not None))
 
     def forward(self, visual, padding_mask, text, lengths, return_aux=False,
                 return_shared_features=False):
@@ -71,8 +78,14 @@ class CNNMemoryCLIPVAD(CLIPVAD):
             # Preserve the original forward for CLIP inputs and old checkpoints.
             features = self.encode_video(visual, padding_mask, lengths)
         logits_c = self.classifier(features + self.mlp2(features))
+        # A keeps its original C-derived aggregation weights and original H.
+        # Reuse the SAME classifier/MLP for H'; there is no auxiliary head.
+        visual_prompt_logits = logits_c
+        if self.cnn_enhancement is not None and bool(self.memory_active):
+            enhanced = self.cnn_enhancement(features, lengths)
+            logits_c = self.classifier(enhanced + self.mlp2(enhanced))
         text_original = self.encode_textprompt(text)
-        visual_attention = logits_c.permute(0, 2, 1) @ features
+        visual_attention = visual_prompt_logits.permute(0, 2, 1) @ features
         if self.input_features == "post_lgt":
             # Cached padding and all-padding test chunks can be exactly zero.
             visual_attention = F.normalize(visual_attention, dim=-1, eps=1e-6)
@@ -118,4 +131,5 @@ def build_model(config, device):
         )},
         aux_mode=config.get("aux_mode", "prototype"),
         input_features=config.get("input_features", "clip"),
+        cnn_channels=config.get("cnn_channels", 128),
     )

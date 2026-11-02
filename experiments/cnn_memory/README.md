@@ -1,15 +1,21 @@
-# VadCLIP + CNN visual memory — UCF-Crime
+# VadCLIP + CNN feature enhancement — UCF-Crime
 
 Thí nghiệm độc lập, không sửa `src/` và không sửa các thí nghiệm cũ.
-Đây là code thử nghiệm; bản sửa đầu vào cached post-LGT chưa có kết quả GPU/AUC mới.
+Đây là code thử nghiệm; phương pháp GRF mới chưa có kết quả GPU/AUC.
+
+**Phương pháp đã chốt 02/11/2026 — CNN + Gated Residual Fusion:** xem
+[GATED_RESIDUAL.md](GATED_RESIDUAL.md). Chọn `--aux-mode gated_residual --aux-branch c`:
+H sau LGT → một Conv1D 512→128 (k3) → GELU → Linear 128→512 → gate theo chiều
+feature → H' → classifier C gốc. A dùng H gốc; giữ các loss gốc, không có
+auxiliary classifier, prototype hoặc MSE trong mode mới.
 
 **Dataset đã xuất sau LGT:** thêm `--input-features post_lgt` vào lệnh train.
 Feature `.npy` đi trực tiếp vào C/A và CNN; LGT được bỏ qua và đóng băng trong
 run này. Loại đầu vào lưu trong checkpoint và được evaluate/predict đọc lại.
 Mặc định `clip` vẫn giữ các lệnh/checkpoint cũ. Lệnh đúng cho dataset post-LGT
-của người dùng nằm trong [JOINT_MSE.md](JOINT_MSE.md).
+của người dùng nằm trong [GATED_RESIDUAL.md](GATED_RESIDUAL.md).
 
-**Bản mới học chung `future_mse_joint`:** xem [JOINT_MSE.md](JOINT_MSE.md).
+**Biến thể cũ học chung `future_mse_joint`:** xem [JOINT_MSE.md](JOINT_MSE.md).
 CNN, đầu chấm điểm và đầu dự đoán tương lai được học trong cùng batch với C/A;
 không cần pretrain riêng hoặc đóng băng encoder. Dùng notebook và setup cũ,
 không tạo notebook mới; evaluator gốc được giữ nguyên.
@@ -20,7 +26,7 @@ MSE dự đoán feature CLIP tương lai, bỏ đầu dự đoán, đóng băng 
 bổ trợ C/A. Không dùng prototype/cosine trong nhánh mới. Mặc định `prototype`
 vẫn chạy thí nghiệm cũ được mô tả bên dưới; lệnh cũ/checkpoint cũ vẫn được hỗ trợ.
 
-## Kiến trúc và cách học
+## Kiến trúc và cách học của mode prototype cũ
 
 ```text
 CLIP features -> LGT gốc -> F [B,T,512] -> C/A gốc -> logits C/A

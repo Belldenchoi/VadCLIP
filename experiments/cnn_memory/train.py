@@ -73,6 +73,8 @@ def main():
         if args.aux_mode == "future_mse_joint":
             changed.extend(key for key in ("future_horizon", "mse_loss_weight")
                            if saved["train_args"].get(key) != getattr(args, key))
+        if args.aux_mode == "gated_residual" and saved["train_args"].get("cnn_channels") != args.cnn_channels:
+            changed.append("cnn_channels")
         if changed:
             raise ValueError(f"Resume configuration differs for: {', '.join(changed)}")
         if saved["epoch"] >= args.max_epoch:
@@ -114,6 +116,12 @@ def main():
         logger.log(f"joint_training=True encoder_frozen=False future_horizon={args.future_horizon} "
                    f"mse_loss_weight={args.mse_loss_weight} predictor_evaluation=False "
                    f"mse_target={args.input_features}_feature")
+    if args.aux_mode == "gated_residual":
+        logger.log(f"feature_fusion=gated_residual enabled={args.aux_branch == 'c'} "
+                   f"conv_layers=1 cnn_channels={args.cnn_channels} kernel=3 stride=1 dilation=1 padding=1 "
+                   f"gate_bias_init=-2.0 cnn_lr={args.lr} objective=vadclip_original "
+                   "auxiliary_classifier=False mse=False a_features=original_h "
+                   "visual_prompt_weights=original_c")
     if args.aux_mode == "future_mse" and model.memory is not None and not saved:
         try:
             from .future_features import load_pretrained_encoder
@@ -203,8 +211,11 @@ def main():
                     auxiliary["future_predictions"], features, lengths,
                     args.future_horizon, allow_empty=True,
                 )
-            loss = (loss_c + loss_a + loss_text + args.memory_loss_weight * loss_memory
-                    + args.mse_loss_weight * loss_mse)
+            if args.aux_mode == "gated_residual":
+                loss = loss_c + loss_a + loss_text
+            else:
+                loss = (loss_c + loss_a + loss_text + args.memory_loss_weight * loss_memory
+                        + args.mse_loss_weight * loss_mse)
             if not bool(torch.isfinite(loss)):
                 raise FloatingPointError(f"Non-finite loss at epoch={epoch}, batch={batch_index}")
             optimizer.zero_grad(set_to_none=True)

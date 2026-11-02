@@ -1,5 +1,8 @@
 # CNN + MSE học chung với C/A
 
+**Tài liệu của biến thể cũ.** Phương pháp người dùng chốt ngày 02/11/2026 là
+[CNN + Gated Residual Fusion](GATED_RESIDUAL.md), không dùng MSE hoặc classifier phụ.
+
 Mode `future_mse_joint` trong `experiments/cnn_memory`. Với dataset người dùng
 đã xuất **sau LGT**, dùng `--input-features post_lgt`: C/A và CNN nhận trực tiếp
 cùng feature đã lưu, không chạy LGT lần thứ hai. Giữ nguyên src, classifier C,
