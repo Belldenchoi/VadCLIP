@@ -1,5 +1,11 @@
 # VadCLIP Top-K variants
 
+Hai thí nghiệm chuyển từ Finetune-VadCLIP đã có trong
+**[FINETUNE_MARGINS.md](FINETUNE_MARGINS.md)**: Temporal-A/R + Ranking Margin
+và Temporal-A/R + Abnormal Background Separation. Chọn riêng bằng
+`--finetune-margin ranking` hoặc `background`; mặc định `none` giữ baseline.
+Tài liệu có ba cell Kaggle R0/R1/R2 dùng CSV cũ. Không sửa `src/` hoặc notebook.
+
 Folder này chứa code thí nghiệm Top-K. PCA cũ dùng `return_visual_features`
 (feature chung); PCA riêng ở C dùng `return_c_features` trong `src/model.py`.
 Lời gọi mặc định vẫn trả ba output và giữ đường tính của baseline.

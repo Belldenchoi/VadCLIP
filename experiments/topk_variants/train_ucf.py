@@ -144,15 +144,19 @@ def CLAS2(logits, labels, lengths, device, temperature=1.0,
 
 def train(model, normal_loader, anomaly_loader, testloader, args, label_map, device):
     from shift_augmentation import TailShiftAugmentation
+    from finetune_margin_adapter import FinetuneMarginLoss
 
     tail_shift = TailShiftAugmentation(args)
     auxiliary = SnippetAuxiliaryLoss(args)
-    if (auxiliary.config['enabled'] or tail_shift.enabled) and not args.use_checkpoint:
+    finetune_margin = FinetuneMarginLoss(args)
+    if (auxiliary.config['enabled'] or tail_shift.enabled or finetune_margin.enabled) and not args.use_checkpoint:
         for output in (args.checkpoint_path, args.model_path, args.log_path):
             if output and Path(output).exists():
-                raise ValueError(f'New auxiliary/shift run would overwrite {output}; choose new output paths')
+                raise ValueError(f'New auxiliary/shift/margin run would overwrite {output}; choose new output paths')
     if tail_shift.enabled and getattr(model, 'uses_fixed_prototypes', False):
         raise ValueError('Tail shift ablation requires the standard CLIPVAD model')
+    if finetune_margin.enabled and getattr(model, 'uses_fixed_prototypes', False):
+        raise ValueError('Finetune margins require the standard CLIPVAD model')
     if auxiliary.pca_enabled and getattr(model, 'uses_fixed_prototypes', False):
         raise ValueError('PCA ablation is currently supported only by the standard CLIPVAD model')
     validate_temperature_config(args)
@@ -310,6 +314,8 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         f"a_temporal_smoothness_weight="
         f"{args.a_temporal_smoothness_weight}"
     )
+    if finetune_margin.enabled:
+        logger.log('finetune_margin_config=' + str(finetune_margin.config))
     prompt_text = get_prompt_text(label_map)
     ap_best = 0
     start_epoch = 0
@@ -323,6 +329,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         validate_checkpoint_temperature(args, checkpoint)
         validate_checkpoint_ranking(args, checkpoint)
         tail_shift.validate_checkpoint(checkpoint)
+        finetune_margin.validate_checkpoint(checkpoint)
         auxiliary.restore(checkpoint)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -373,6 +380,9 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
         )
         if args.c_ranking_loss:
             logger.log(f"epoch={e + 1} c_ranking_active={c_ranking_active}")
+        if finetune_margin.enabled:
+            logger.log(f"epoch={e + 1} finetune_margin_mode={finetune_margin.mode} "
+                       f"finetune_margin_active={finetune_margin.active(e + 1)}")
         model.train()
         auxiliary.begin_epoch(e + 1, model, normal_loader.dataset, device, logger)
         if tail_shift.enabled:
@@ -605,6 +615,11 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         1 - text_labels[:, 0], e + 1,
                     )
                     loss = loss + auxiliary_loss
+                if finetune_margin.enabled:
+                    margin_loss, margin_metrics = finetune_margin(
+                        logits1, logits2, text_labels, feat_lengths, e + 1)
+                    loss = loss + margin_loss
+                    auxiliary_metrics.update(margin_metrics)
                 dual_loss_c = torch.zeros((), device=device)
                 dual_loss_a = torch.zeros((), device=device)
                 if args.dual_k:
@@ -795,6 +810,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                         'c_ranking_config': ranking_config(args),
                         'snippet_auxiliary': auxiliary.state_dict(),
                         'tail_shift_config': tail_shift.config,
+                        **finetune_margin.checkpoint_fields(),
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'dual_lambda_c': dual_lambda_c,
@@ -846,6 +862,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 'c_ranking_config': ranking_config(args),
                 'snippet_auxiliary': auxiliary.state_dict(),
                 'tail_shift_config': tail_shift.config,
+                **finetune_margin.checkpoint_fields(),
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
@@ -877,6 +894,7 @@ def train(model, normal_loader, anomaly_loader, testloader, args, label_map, dev
                 checkpoint = torch.load(
                     args.checkpoint_path, weights_only=False
                 )
+                finetune_margin.validate_checkpoint(checkpoint)
                 model.load_state_dict(checkpoint['model_state_dict'])
 
     if args.skip_eval:
@@ -899,11 +917,14 @@ def setup_seed(seed):
     #torch.backends.cudnn.deterministic = True
 
 if __name__ == '__main__':
+    from finetune_margin_adapter import FinetuneMarginLoss
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args = ucf_option.parser.parse_args()
     validate_temperature_config(args)
     validate_ranking_config(args)
     validate_snippet_config(args)
+    FinetuneMarginLoss(args)
     setup_seed(args.seed)
 
     label_map = dict({'Normal': 'normal', 'Abuse': 'abuse', 'Arrest': 'arrest', 'Arson': 'arson', 'Assault': 'assault', 'Burglary': 'burglary', 'Explosion': 'explosion', 'Fighting': 'fighting', 'RoadAccidents': 'roadAccidents', 'Robbery': 'robbery', 'Shooting': 'shooting', 'Shoplifting': 'shoplifting', 'Stealing': 'stealing', 'Vandalism': 'vandalism'})

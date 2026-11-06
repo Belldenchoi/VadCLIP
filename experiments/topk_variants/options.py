@@ -2,6 +2,21 @@ import argparse
 
 parser = argparse.ArgumentParser(description='VadCLIP')
 
+# Ports of Finetune-VadCLIP's two margin experiments; default leaves R unchanged.
+parser.add_argument('--finetune-margin', choices=['none', 'ranking', 'background'], default='none',
+                    help='Run one imported loss on the Temporal-A reference')
+parser.add_argument('--regularize-score-branch', choices=['classifier', 'alignment', 'both'], default='both')
+parser.add_argument('--regularize-top-k-ratio', type=float, default=0.15,
+                    help='Auxiliary Top-K fraction; does not change C/A task pooling')
+parser.add_argument('--lambda-ranking-margin', type=float, default=0.05)
+parser.add_argument('--ranking-margin', type=float, default=0.20)
+parser.add_argument('--ranking-warmup-epochs', type=int, default=1,
+                    help='Number of initial epochs without Ranking Margin')
+parser.add_argument('--lambda-abnormal-bg', type=float, default=0.0,
+                    help='Set positive when --finetune-margin background is enabled')
+parser.add_argument('--abnormal-bg-margin', type=float, default=0.20)
+parser.add_argument('--abnormal-bg-warmup-epochs', type=int, default=0)
+
 # Fixed tail shift after process_feat; off for all existing experiments.
 parser.add_argument('--tail-shift-augmentation', action='store_true',
                     help='Average C/A MIL losses over original and tail-shifted views; '
@@ -168,6 +183,6 @@ parser.add_argument('--gt-path', default='list/gt_ucf.npy')
 parser.add_argument('--gt-segment-path', default='list/gt_segment_ucf.npy')
 parser.add_argument('--gt-label-path', default='list/gt_label_ucf.npy')
 
-parser.add_argument('--lr', default=2e-5)
+parser.add_argument('--lr', default=2e-5, type=float)
 parser.add_argument('--scheduler-rate', default=0.1)
 parser.add_argument('--scheduler-milestones', default=[4, 8])
